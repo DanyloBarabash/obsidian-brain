@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if anyone runs npm init here)
+node_modules/
+npm-debug.log*
+
+# Vault data — never commit personal notes
+# (vault-template is intentionally tracked)
+*.vault/
+
+# Secrets / env
+.env
+.env.local
