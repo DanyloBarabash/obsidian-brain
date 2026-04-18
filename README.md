@@ -221,9 +221,18 @@ tags: [#resource, #microservices, #architecture]
 
 ### Потрібно
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) встановлений і налаштований
-- Node.js 18+
-- Obsidian (або просто папка — Obsidian опціональний для перегляду)
+- **Claude Code** — встановлений і залогінений (`claude --version` має працювати)
+- **Node.js 18+** — перевір: `node --version`
+- **npm** — йде разом з Node.js
+- **Obsidian** — опціональний, але рекомендований для перегляду графу зв'язків
+
+Якщо Claude Code ще не встановлений:
+```bash
+npm install -g @anthropic-ai/claude-code
+claude login
+```
+
+---
 
 ### Крок 1 — Клонувати репо
 
@@ -232,6 +241,8 @@ git clone https://github.com/YOUR_USERNAME/claude-obsidian-kit.git
 cd claude-obsidian-kit
 ```
 
+---
+
 ### Крок 2 — Запустити install.sh
 
 ```bash
@@ -239,27 +250,76 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Скрипт запитає де знаходиться vault і зробить все автоматично:
-- Встановить `obsidian-mcp`
-- Скопіює slash-команди в `~/.claude/commands/`
-- Налаштує MCP в Claude Code
-- Вимкне auto-compact
-- Скопіює структуру vault якщо папка порожня
+Скрипт інтерактивний — запитає шлях до vault і зробить все автоматично:
 
-### Крок 3 — Перезапустити Claude Code
+| Що робить | Деталі |
+|-----------|--------|
+| Встановлює `obsidian-mcp` | `npm install -g @smithery/mcp-obsidian` |
+| Реєструє MCP сервер | `claude mcp add obsidian -- mcp-obsidian --vault <path>` |
+| Копіює slash-команди | `~/.claude/commands/*.md` |
+| Вимикає auto-compact | `claude config set --global autoCompact false` |
+| Копіює шаблон vault | тільки якщо папка порожня |
 
-Команди завантажуються при старті.
+Якщо vault ще не існує — залиш поле порожнім, скрипт створить `~/obsidian-vault/`.
+
+---
+
+### Крок 3 — Перевірити що MCP підключився
+
+Перезапусти Claude Code і запусти:
+```
+/mcp
+```
+
+Має з'явитись рядок з `obsidian` зі статусом `connected`. Якщо ні — дивись [Troubleshooting](#troubleshooting).
+
+---
 
 ### Крок 4 — Перший проєкт
 
 ```bash
+# Створи папку для проєкту у vault
+mkdir -p ~/your-vault/Projects/my-project
+
+# Скопіюй шаблон
 cp vault-template/Projects/README-template.md ~/your-vault/Projects/my-project/README.md
 ```
 
-Відредагуй файл, потім у Claude Code:
+Відредагуй `README.md` — заповни стек, ціль, перші питання. Потім у Claude Code:
+
 ```
 /resume my-project
 ```
+
+---
+
+## Перевірка після встановлення
+
+Щоб переконатись що все працює:
+
+**1. MCP підключений**
+```
+/mcp
+```
+→ `obsidian  connected`
+
+**2. Команди доступні**
+```
+/resume
+```
+→ Claude має відповісти питанням про проєкт або списком Projects/
+
+**3. MCP читає vault**
+```
+/search test
+```
+→ Claude має спробувати шукати (навіть якщо нічого не знайде)
+
+**4. Збереження працює**
+```
+/save-to-obsidian
+```
+→ Claude покаже preview файлу перед збереженням
 
 ---
 
@@ -281,6 +341,113 @@ claude config set --global autoCompact false
 
 # 5. Скопіювати структуру vault (якщо новий vault)
 cp -r vault-template/* /path/to/your/vault/
+```
+
+---
+
+## Конфігурація
+
+### Де зберігаються налаштування
+
+| Що | Шлях |
+|----|------|
+| Slash-команди | `~/.claude/commands/*.md` |
+| MCP конфіг | `~/.claude/claude.json` (або `claude mcp list`) |
+| Глобальні налаштування | `claude config list` |
+
+### Змінити vault після встановлення
+
+```bash
+# Видалити старий MCP запис і додати новий
+claude mcp remove obsidian
+claude mcp add obsidian -- mcp-obsidian --vault /new/path/to/vault
+```
+
+### Кастомізувати команди
+
+Команди — звичайні markdown файли. Відкрий будь-яку з `~/.claude/commands/*.md` і відредагуй інструкції. Зміни набирають чинності з наступного запуску Claude Code.
+
+Додати нову команду:
+```bash
+# Наприклад, /standup для щоденного звіту
+touch ~/.claude/commands/standup.md
+# Відредагуй файл — опиши що має робити Claude
+```
+
+### CLAUDE.md у vault
+
+`vault/CLAUDE.md` читається при кожній сесії де MCP підключений. Редагуй його щоб:
+- Описати нові проєкти в таблиці
+- Додати теги до таксономії
+- Змінити мову зведень
+
+---
+
+## Troubleshooting
+
+### `/mcp` не показує `obsidian`
+
+```bash
+# Перевір чи mcp-obsidian встановлений
+which mcp-obsidian
+
+# Якщо не знайдено:
+npm install -g @smithery/mcp-obsidian
+
+# Перевір список зареєстрованих MCP
+claude mcp list
+
+# Якщо obsidian відсутній — додай вручну
+claude mcp add obsidian -- mcp-obsidian --vault /absolute/path/to/vault
+```
+
+### MCP показує `error` або `disconnected`
+
+```bash
+# Перевір чи шлях до vault правильний
+claude mcp list
+# Знайди рядок obsidian і перевір --vault аргумент
+
+# Переконайся що папка існує
+ls /path/to/your/vault
+
+# Перезапусти Claude Code після виправлення
+```
+
+### Команди не з'являються (немає `/resume` тощо)
+
+```bash
+# Перевір чи файли скопійовані
+ls ~/.claude/commands/
+
+# Якщо папки немає або файли відсутні:
+mkdir -p ~/.claude/commands
+cp /path/to/claude-obsidian-kit/commands/*.md ~/.claude/commands/
+```
+
+Команди з'являються тільки після **перезапуску** Claude Code.
+
+### Claude не бачить файли у vault
+
+MCP сервер потребує **абсолютний** шлях. Перевір:
+```bash
+claude mcp list
+# Рядок має виглядати так:
+# obsidian: mcp-obsidian --vault /Users/you/your-vault
+```
+
+Відносні шляхи (`~/vault`, `./vault`) можуть не працювати — використовуй `$(pwd)` або повний шлях:
+```bash
+claude mcp remove obsidian
+claude mcp add obsidian -- mcp-obsidian --vault "$HOME/your-vault"
+```
+
+### `auto-compact` не вимкнений
+
+```bash
+claude config list | grep autoCompact
+# Якщо не false:
+claude config set --global autoCompact false
 ```
 
 ---
