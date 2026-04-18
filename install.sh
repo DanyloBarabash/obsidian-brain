@@ -76,8 +76,29 @@ success "Commands installed: resume, save-to-obsidian, ingest, search"
 
 # --- Disable auto-compact ---
 
-info "Disabling auto-compact..."
-claude config set --global autoCompact false
+info "Disabling auto-compact in ~/.claude/settings.json..."
+python3 - <<'PYEOF'
+import json, os, sys
+
+path = os.path.expanduser("~/.claude/settings.json")
+settings = {}
+if os.path.exists(path):
+    try:
+        with open(path) as f:
+            settings = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        pass
+
+if settings.get("autoCompact") is False:
+    print("  already disabled, skipping")
+    sys.exit(0)
+
+settings["autoCompact"] = False
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w") as f:
+    json.dump(settings, f, indent=2)
+    f.write("\n")
+PYEOF
 success "Auto-compact disabled"
 
 # --- Copy vault template (only empty dirs) ---

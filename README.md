@@ -258,7 +258,7 @@ chmod +x install.sh
 | Встановлює MCP сервер | `npm install -g @bitbonsai/mcpvault` |
 | Реєструє MCP сервер | `claude mcp add obsidian -- npx @bitbonsai/mcpvault <path>` |
 | Копіює slash-команди | `~/.claude/commands/*.md` |
-| Вимикає auto-compact | `claude config set --global autoCompact false` |
+| Вимикає auto-compact | додає `"autoCompact": false` в `~/.claude/settings.json` |
 | Копіює шаблон vault | тільки якщо папка порожня |
 
 Якщо vault ще не існує — залиш поле порожнім, скрипт створить `~/obsidian-vault/`.
@@ -346,8 +346,14 @@ claude mcp add obsidian -- npx @bitbonsai/mcpvault /absolute/path/to/your/vault
 mkdir -p ~/.claude/commands
 cp commands/*.md ~/.claude/commands/
 
-# 4. Вимкнути auto-compact
-claude config set --global autoCompact false
+# 4. Вимкнути auto-compact (додає "autoCompact": false в ~/.claude/settings.json)
+python3 -c "
+import json, os
+p = os.path.expanduser('~/.claude/settings.json')
+s = json.load(open(p)) if os.path.exists(p) else {}
+s['autoCompact'] = False
+open(p, 'w').write(json.dumps(s, indent=2) + '\n')
+"
 
 # 5. Скопіювати структуру vault (якщо новий vault)
 cp -r vault-template/* /path/to/your/vault/
@@ -363,7 +369,7 @@ cp -r vault-template/* /path/to/your/vault/
 |----|------|
 | Slash-команди | `~/.claude/commands/*.md` |
 | MCP конфіг | `~/.claude/claude.json` (або `claude mcp list`) |
-| Глобальні налаштування | `claude config list` |
+| Глобальні налаштування | `~/.claude/settings.json` |
 
 ### Змінити vault після встановлення
 
@@ -459,9 +465,9 @@ claude mcp add obsidian -- npx @bitbonsai/mcpvault "$HOME/your-vault"
 ### `auto-compact` не вимкнений
 
 ```bash
-claude config list | grep autoCompact
-# Якщо не false:
-claude config set --global autoCompact false
+cat ~/.claude/settings.json | grep autoCompact
+# Якщо відсутній або true — відредагуй ~/.claude/settings.json вручну:
+# "autoCompact": false
 ```
 
 ---
