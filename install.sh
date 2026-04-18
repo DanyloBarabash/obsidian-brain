@@ -56,14 +56,14 @@ success "Vault: $VAULT_PATH"
 # --- Install MCP server ---
 
 echo ""
-info "Installing obsidian-mcp..."
-npm install -g @smithery/mcp-obsidian
-success "obsidian-mcp installed"
+info "Installing @bitbonsai/mcpvault..."
+npm install -g @bitbonsai/mcpvault
+success "@bitbonsai/mcpvault installed"
 
 # --- Configure MCP in Claude Code ---
 
 info "Adding MCP server to Claude Code config..."
-claude mcp add obsidian -- mcp-obsidian --vault "$VAULT_PATH"
+claude mcp add obsidian -- npx @bitbonsai/mcpvault "$VAULT_PATH"
 success "MCP server configured"
 
 # --- Copy slash commands ---

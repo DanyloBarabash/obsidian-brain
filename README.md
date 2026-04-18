@@ -255,8 +255,8 @@ chmod +x install.sh
 
 | Що робить | Деталі |
 |-----------|--------|
-| Встановлює `obsidian-mcp` | `npm install -g @smithery/mcp-obsidian` |
-| Реєструє MCP сервер | `claude mcp add obsidian -- mcp-obsidian --vault <path>` |
+| Встановлює MCP сервер | `npm install -g @bitbonsai/mcpvault` |
+| Реєструє MCP сервер | `claude mcp add obsidian -- npx @bitbonsai/mcpvault <path>` |
 | Копіює slash-команди | `~/.claude/commands/*.md` |
 | Вимикає auto-compact | `claude config set --global autoCompact false` |
 | Копіює шаблон vault | тільки якщо папка порожня |
@@ -337,10 +337,10 @@ cp vault-template/Projects/README-template.md ~/your-vault/Projects/my-project/R
 
 ```bash
 # 1. Встановити MCP сервер
-npm install -g @smithery/mcp-obsidian
+npm install -g @bitbonsai/mcpvault
 
 # 2. Додати в конфіг Claude Code
-claude mcp add obsidian -- mcp-obsidian --vault /absolute/path/to/your/vault
+claude mcp add obsidian -- npx @bitbonsai/mcpvault /absolute/path/to/your/vault
 
 # 3. Скопіювати команди
 mkdir -p ~/.claude/commands
@@ -370,7 +370,7 @@ cp -r vault-template/* /path/to/your/vault/
 ```bash
 # Видалити старий MCP запис і додати новий
 claude mcp remove obsidian
-claude mcp add obsidian -- mcp-obsidian --vault /new/path/to/vault
+claude mcp add obsidian -- npx @bitbonsai/mcpvault /new/path/to/vault
 ```
 
 ### Кастомізувати команди
@@ -400,17 +400,17 @@ touch ~/.claude/commands/standup.md
 ### `/mcp` не показує `obsidian`
 
 ```bash
-# Перевір чи mcp-obsidian встановлений
-which mcp-obsidian
+# Перевір чи пакет встановлений
+npm list -g @bitbonsai/mcpvault
 
 # Якщо не знайдено:
-npm install -g @smithery/mcp-obsidian
+npm install -g @bitbonsai/mcpvault
 
 # Перевір список зареєстрованих MCP
 claude mcp list
 
 # Якщо obsidian відсутній — додай вручну
-claude mcp add obsidian -- mcp-obsidian --vault /absolute/path/to/vault
+claude mcp add obsidian -- npx @bitbonsai/mcpvault /absolute/path/to/vault
 ```
 
 ### MCP показує `error` або `disconnected`
@@ -446,14 +446,14 @@ MCP сервер потребує **абсолютний** шлях. Перев�
 ```bash
 claude mcp list
 # Рядок має виглядати так:
-# obsidian: mcp-obsidian --vault /Users/you/your-vault
+# obsidian: npx @bitbonsai/mcpvault /Users/you/your-vault
 ```
 
 Відносні шляхи (`~/vault`, `./vault`) можуть не працювати — використовуй `$(pwd)` або повний шлях:
 
 ```bash
 claude mcp remove obsidian
-claude mcp add obsidian -- mcp-obsidian --vault "$HOME/your-vault"
+claude mcp add obsidian -- npx @bitbonsai/mcpvault "$HOME/your-vault"
 ```
 
 ### `auto-compact` не вимкнений
