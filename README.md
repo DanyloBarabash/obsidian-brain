@@ -227,6 +227,7 @@ tags: [#resource, #microservices, #architecture]
 - **Obsidian** — опціональний, але рекомендований для перегляду графу зв'язків
 
 Якщо Claude Code ще не встановлений:
+
 ```bash
 npm install -g @anthropic-ai/claude-code
 claude login
@@ -267,7 +268,8 @@ chmod +x install.sh
 ### Крок 3 — Перевірити що MCP підключився
 
 Перезапусти Claude Code і запусти:
-```
+
+```text
 /mcp
 ```
 
@@ -287,7 +289,7 @@ cp vault-template/Projects/README-template.md ~/your-vault/Projects/my-project/R
 
 Відредагуй `README.md` — заповни стек, ціль, перші питання. Потім у Claude Code:
 
-```
+```text
 /resume my-project
 ```
 
@@ -297,28 +299,36 @@ cp vault-template/Projects/README-template.md ~/your-vault/Projects/my-project/R
 
 Щоб переконатись що все працює:
 
-**1. MCP підключений**
-```
+#### 1. MCP підключений
+
+```text
 /mcp
 ```
+
 → `obsidian  connected`
 
-**2. Команди доступні**
-```
+#### 2. Команди доступні
+
+```text
 /resume
 ```
+
 → Claude має відповісти питанням про проєкт або списком Projects/
 
-**3. MCP читає vault**
-```
+#### 3. MCP читає vault
+
+```text
 /search test
 ```
+
 → Claude має спробувати шукати (навіть якщо нічого не знайде)
 
-**4. Збереження працює**
-```
+#### 4. Збереження працює
+
+```text
 /save-to-obsidian
 ```
+
 → Claude покаже preview файлу перед збереженням
 
 ---
@@ -368,6 +378,7 @@ claude mcp add obsidian -- mcp-obsidian --vault /new/path/to/vault
 Команди — звичайні markdown файли. Відкрий будь-яку з `~/.claude/commands/*.md` і відредагуй інструкції. Зміни набирають чинності з наступного запуску Claude Code.
 
 Додати нову команду:
+
 ```bash
 # Наприклад, /standup для щоденного звіту
 touch ~/.claude/commands/standup.md
@@ -377,6 +388,7 @@ touch ~/.claude/commands/standup.md
 ### CLAUDE.md у vault
 
 `vault/CLAUDE.md` читається при кожній сесії де MCP підключений. Редагуй його щоб:
+
 - Описати нові проєкти в таблиці
 - Додати теги до таксономії
 - Змінити мову зведень
@@ -430,6 +442,7 @@ cp /path/to/claude-obsidian-kit/commands/*.md ~/.claude/commands/
 ### Claude не бачить файли у vault
 
 MCP сервер потребує **абсолютний** шлях. Перевір:
+
 ```bash
 claude mcp list
 # Рядок має виглядати так:
@@ -437,6 +450,7 @@ claude mcp list
 ```
 
 Відносні шляхи (`~/vault`, `./vault`) можуть не працювати — використовуй `$(pwd)` або повний шлях:
+
 ```bash
 claude mcp remove obsidian
 claude mcp add obsidian -- mcp-obsidian --vault "$HOME/your-vault"
@@ -454,7 +468,7 @@ claude config set --global autoCompact false
 
 ## Структура vault детально
 
-```
+```text
 vault/
 ├── CLAUDE.md                    ← читається автоматично при кожному старті
 ├── Projects/
