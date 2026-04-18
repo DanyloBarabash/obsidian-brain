@@ -58,6 +58,21 @@ claude-obsidian-kit/
 
 ## Команди
 
+### `/switch-vault [name]`
+
+Перемикає активний vault для поточної сесії. Всі наступні команди (`/resume`, `/save-to-obsidian`, `/ingest`, `/search`) будуть працювати з обраним vault-ом.
+
+```
+/switch-vault work
+/switch-vault personal
+/switch-vault          ← без аргументу — показує список і питає
+```
+
+Якщо підключено тільки один vault — він використовується автоматично.
+Якщо підключено кілька — Claude питає який використовувати при першому зверненні в сесії.
+
+---
+
 ### `/resume [project]`
 
 Завантажує контекст на початку сесії.
@@ -175,10 +190,23 @@ tags: [#resource, #microservices, #architecture]
 
 ## Workflow
 
+### Кілька vault-ів
+
+```
+# Перемкнутись на робочий vault
+/switch-vault work
+/resume project-api
+
+# Або на особистий
+/switch-vault personal
+/resume fitness-tracker
+```
+
 ### Звичайна сесія
 
 ```
 # Початок
+/switch-vault work       ← якщо кілька vault-ів
 /resume project-api
 
 # ... робота ...
@@ -256,7 +284,7 @@ chmod +x install.sh
 | Що робить | Деталі |
 |-----------|--------|
 | Встановлює MCP сервер | `npm install -g @bitbonsai/mcpvault` |
-| Реєструє MCP сервер | `claude mcp add obsidian -- npx @bitbonsai/mcpvault <path>` |
+| Реєструє vault-и | `claude mcp add obsidian-<name> --scope user -- npx @bitbonsai/mcpvault <path>` |
 | Копіює slash-команди | `~/.claude/commands/*.md` |
 | Вимикає auto-compact | додає `"autoCompact": false` в `~/.claude/settings.json` |
 | Копіює шаблон vault | тільки якщо папка порожня |
@@ -339,8 +367,9 @@ cp vault-template/Projects/README-template.md ~/your-vault/Projects/my-project/R
 # 1. Встановити MCP сервер
 npm install -g @bitbonsai/mcpvault
 
-# 2. Додати в конфіг Claude Code
-claude mcp add obsidian -- npx @bitbonsai/mcpvault /absolute/path/to/your/vault
+# 2. Зареєструвати vault-и (повторити для кожного)
+claude mcp add obsidian-work     --scope user -- npx @bitbonsai/mcpvault /path/to/work-vault
+claude mcp add obsidian-personal --scope user -- npx @bitbonsai/mcpvault /path/to/personal-vault
 
 # 3. Скопіювати команди
 mkdir -p ~/.claude/commands
