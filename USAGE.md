@@ -28,7 +28,7 @@ They coexist on the same files.
 
 ```bash
 git clone <repo>
-cd claude_obsidian
+cd obsidian-brain
 
 # Install globally + initialize the root brain vault
 ./install.sh --vault ~/brain

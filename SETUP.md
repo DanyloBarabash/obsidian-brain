@@ -20,8 +20,8 @@ It stores everything in a folder of text files that you can also browse in Obsid
 Open your terminal and run:
 
 ```bash
-git clone https://github.com/your-repo/claude_obsidian.git
-cd claude_obsidian
+git clone https://github.com/DanyloBarabash/obsidian-brain.git
+cd obsidian-brain
 ```
 
 > Don't have git? Download the ZIP from the repo page and unzip it.
@@ -141,7 +141,7 @@ Opening `brain` in Obsidian gives you a visual view of all your notes and how th
 ## Troubleshooting
 
 **"Command not found" when running a `/` command**
-Run the installer again: `./install.sh --force` inside the `claude_obsidian` folder.
+Run the installer again: `./install.sh --force` inside the `obsidian-brain` folder.
 
 **"No active vault configured"**
 Run `/add-vault your-project-name` to create a project first.

@@ -1,4 +1,4 @@
-# Claude Brain — AI Memory System via Obsidian
+# Obsidian Brain — AI Memory System via Obsidian
 
 A persistent, structured memory layer for Claude, Codex, and other AI assistants, built on Obsidian vaults.
 
