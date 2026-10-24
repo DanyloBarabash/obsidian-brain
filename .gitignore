@@ -20,3 +20,7 @@ npm-debug.log*
 # Secrets / env
 .env
 .env.local
+
+# Local Claude state
+.claude/settings.local.json
+.claude/skills/*/state.json
