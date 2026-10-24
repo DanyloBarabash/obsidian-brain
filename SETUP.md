@@ -37,7 +37,9 @@ cd claude_obsidian
 ```
 
 This does three things:
-- Installs the commands so Claude knows them in every session
+- Installs the commands, hooks and skills into every Claude config it finds
+  (`~/.claude`, `~/.claude-*`, `~/.claude-envs/*/.claude`) and the `obsidian-brain` skill into Codex
+  (`--config-dir <dir>` limits Claude configs, `--no-codex` skips Codex)
 - Creates a `brain` folder in your home directory — this is where all your memory lives
 - Sets everything up so it works automatically
 

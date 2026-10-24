@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
-# Install Claude Brain globally — commands, scripts, vault, and global settings.
+# Install Claude Brain for every local agent — all Claude Code configs and Codex.
 #
 # Usage:
-#   ./install.sh --vault ~/brain   — full global install with vault
-#   ./install.sh                   — install commands only (no vault)
-#   ./install.sh --force           — overwrite existing command files
+#   ./install.sh --vault ~/brain        — full install and vault initialization
+#   ./install.sh                        — install into every detected agent config
+#   ./install.sh --config-dir <dir>     — install only into this Claude config (repeatable)
+#   ./install.sh --no-codex             — skip Codex
+#   ./install.sh --force                — overwrite existing command files
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Vault config is shared by all agents and always lives here.
+SHARED_SETTINGS="$HOME/.claude/settings.json"
+CODEX_DIR="$HOME/.codex"
+
 VAULT_PATH=""
 FORCE=false
+CODEX=true
+CONFIG_DIRS=()
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --vault)  VAULT_PATH="$2"; shift 2 ;;
-    --force)  FORCE=true; shift ;;
+    --vault)      VAULT_PATH="$2"; shift 2 ;;
+    --config-dir) CONFIG_DIRS+=("$2"); shift 2 ;;
+    --no-codex)   CODEX=false; shift ;;
+    --force)      FORCE=true; shift ;;
     -h|--help)
-      echo "Usage: ./install.sh [--vault <path>] [--force]"
+      echo "Usage: ./install.sh [--vault <path>] [--config-dir <dir>]... [--no-codex] [--force]"
       exit 0 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
@@ -29,73 +39,109 @@ warn()    { echo "  ! $*"; }
 
 expand_path() { echo "$1" | sed "s|^~|$HOME|"; }
 
-# ── 1. Commands → ~/.claude/commands/ ────────────────────────────────────────
-echo ""
-echo "Installing commands to ~/.claude/commands/ ..."
-
-COMMANDS_DIR="$HOME/.claude/commands"
-mkdir -p "$COMMANDS_DIR"
-
-for f in "$SCRIPT_DIR/.claude/commands/"*.md; do
-  name=$(basename "$f")
-  dest="$COMMANDS_DIR/$name"
-  if [ -f "$dest" ] && [ "$FORCE" = false ]; then
-    warn "$name already exists — skipping (use --force to overwrite)"
-  else
-    cp "$f" "$dest"
-    success "$name"
-  fi
-done
-
-# ── 2. Scripts → ~/.claude/scripts/ ──────────────────────────────────────────
-echo ""
-echo "Installing scripts to ~/.claude/scripts/ ..."
-
-SCRIPTS_DIR="$HOME/.claude/scripts"
-mkdir -p "$SCRIPTS_DIR"
-
-for f in "$SCRIPT_DIR/.claude/scripts/"*.sh; do
-  name=$(basename "$f")
-  cp "$f" "$SCRIPTS_DIR/$name"
-  chmod +x "$SCRIPTS_DIR/$name"
-  success "$name"
-done
-
-# ── 2b. Skills → ~/.claude/skills/ ───────────────────────────────────────────
-echo ""
-echo "Installing skills to ~/.claude/skills/ ..."
-
-SKILLS_DIR="$HOME/.claude/skills"
-for d in "$SCRIPT_DIR/.claude/skills/"*/; do
-  name=$(basename "$d")
-  mkdir -p "$SKILLS_DIR/$name"
-  cp "$d"* "$SKILLS_DIR/$name/"
-  success "$name"
-done
-
-# ── 3. Global settings — hooks ────────────────────────────────────────────────
-echo ""
-echo "Configuring ~/.claude/settings.json ..."
-
-GLOBAL_SETTINGS="$HOME/.claude/settings.json"
-
-# Read or create
-if [ -f "$GLOBAL_SETTINGS" ]; then
-  EXISTING=$(cat "$GLOBAL_SETTINGS")
-else
-  EXISTING="{}"
+# Detect Claude configs: ~/.claude, ~/.claude-*, and ~/.claude-envs/*/.claude.
+if [ ${#CONFIG_DIRS[@]} -eq 0 ]; then
+  CONFIG_DIRS=("$HOME/.claude")
+  for d in "$HOME"/.claude-* "$HOME"/.claude-envs/*/.claude; do
+    [ -d "$d" ] || continue
+    [ "$d" = "$HOME/.claude-envs" ] && continue
+    CONFIG_DIRS+=("$d")
+  done
 fi
 
-EXISTING="$EXISTING" python3 - <<'PYEOF'
+# ── 1. Initialize vault ───────────────────────────────────────────────────────
+if [ -n "$VAULT_PATH" ]; then
+  echo ""
+  echo "Initializing vault ..."
+
+  VAULT_ABS="$(expand_path "$VAULT_PATH")"
+
+  if [ -d "$VAULT_ABS/_global" ]; then
+    warn "Vault already initialized at $VAULT_ABS — skipping template copy"
+  else
+    mkdir -p "$VAULT_ABS"
+    cp -r "$SCRIPT_DIR/vault-template/." "$VAULT_ABS/"
+    success "Vault created: $VAULT_ABS"
+  fi
+
+  mkdir -p "$(dirname "$SHARED_SETTINGS")"
+  [ -f "$SHARED_SETTINGS" ] || echo "{}" > "$SHARED_SETTINGS"
+
+  VAULT_ABS="$VAULT_ABS" SHARED_SETTINGS="$SHARED_SETTINGS" python3 - <<'PYEOF'
 import json, os
 
-existing = json.loads(os.environ['EXISTING'])
-settings_path = os.path.expanduser('~/.claude/settings.json')
+vault_abs     = os.environ['VAULT_ABS']
+settings_path = os.environ['SHARED_SETTINGS']
 
-home = os.path.expanduser('~')
+with open(settings_path) as f:
+    s = json.load(f)
+
+s.setdefault('vaults', {})
+s['vaults']['root']   = vault_abs
+s['vaults']['active'] = ''
+s['vaults'].setdefault('aliases', {})
+s['vaults']['aliases']['global'] = vault_abs + '/_global'
+
+with open(settings_path, 'w') as f:
+    json.dump(s, f, indent=2)
+    f.write('\n')
+
+print(f"  ✓ vaults.root set: {vault_abs}")
+print(f"  ✓ global alias:    {vault_abs}/_global")
+PYEOF
+fi
+
+VAULT_ROOT=""
+[ -f "$SHARED_SETTINGS" ] && VAULT_ROOT=$(python3 -c \
+  "import json,sys; print(json.load(open(sys.argv[1])).get('vaults',{}).get('root',''))" "$SHARED_SETTINGS")
+
+# ── 2. Claude Code configs ────────────────────────────────────────────────────
+install_claude() {
+  local CLAUDE_DIR="$1"
+  echo ""
+  echo "── Claude config: $CLAUDE_DIR"
+
+  mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/scripts" "$CLAUDE_DIR/skills"
+
+  for f in "$SCRIPT_DIR/.claude/commands/"*.md; do
+    name=$(basename "$f")
+    dest="$CLAUDE_DIR/commands/$name"
+    if [ -f "$dest" ] && [ "$FORCE" = false ]; then
+      warn "$name already exists — skipping (use --force to overwrite)"
+    else
+      cp "$f" "$dest"
+      success "command $name"
+    fi
+  done
+
+  for f in "$SCRIPT_DIR/.claude/scripts/"*.sh; do
+    name=$(basename "$f")
+    cp "$f" "$CLAUDE_DIR/scripts/$name"
+    chmod +x "$CLAUDE_DIR/scripts/$name"
+    success "script $name"
+  done
+
+  for d in "$SCRIPT_DIR/.claude/skills/"*/; do
+    name=$(basename "$d")
+    mkdir -p "$CLAUDE_DIR/skills/$name"
+    cp "$d"* "$CLAUDE_DIR/skills/$name/"
+    success "skill $name"
+  done
+
+  CLAUDE_DIR="$CLAUDE_DIR" python3 - <<'PYEOF'
+import json, os
+
+claude_dir    = os.environ['CLAUDE_DIR']
+settings_path = os.path.join(claude_dir, 'settings.json')
+
+existing = {}
+if os.path.exists(settings_path):
+    with open(settings_path) as f:
+        existing = json.load(f)
+
 new_commands = [
-    f"bash {home}/.claude/scripts/check-originals.sh",
-    f"bash {home}/.claude/scripts/remind-save-session.sh",
+    f"bash {claude_dir}/scripts/check-originals.sh",
+    f"bash {claude_dir}/scripts/remind-save-session.sh",
 ]
 
 existing.setdefault('hooks', {})
@@ -123,17 +169,13 @@ with open(settings_path, 'w') as f:
     json.dump(existing, f, indent=2)
     f.write('\n')
 
-print(f"  ✓ {added} hook(s) added to ~/.claude/settings.json")
+print(f"  ✓ {added} hook(s) added to settings.json")
 PYEOF
 
-# ── 4. CLAUDE.md — Claude Brain hint ─────────────────────────────────────────
-echo ""
-echo "Updating ~/.claude/CLAUDE.md ..."
-
-python3 - <<'PYEOF'
+  CLAUDE_DIR="$CLAUDE_DIR" python3 - <<'PYEOF'
 import os
 
-claude_md = os.path.expanduser('~/.claude/CLAUDE.md')
+claude_md = os.path.join(os.environ['CLAUDE_DIR'], 'CLAUDE.md')
 marker = '# Claude Brain'
 
 section = '''
@@ -171,67 +213,50 @@ else:
         f.write(section.lstrip())
     print('  ✓ CLAUDE.md created with Claude Brain section')
 PYEOF
+}
 
-# ── 5. Initialize vault ───────────────────────────────────────────────────────
-if [ -n "$VAULT_PATH" ]; then
+for dir in "${CONFIG_DIRS[@]}"; do
+  install_claude "$(expand_path "$dir")"
+done
+
+# ── 3. Codex ──────────────────────────────────────────────────────────────────
+if [ "$CODEX" = true ] && [ -d "$CODEX_DIR" ]; then
   echo ""
-  echo "Initializing vault ..."
+  echo "── Codex: $CODEX_DIR"
 
-  VAULT_ABS="$(expand_path "$VAULT_PATH")"
-
-  if [ -d "$VAULT_ABS/_global" ]; then
-    warn "Vault already initialized at $VAULT_ABS — skipping template copy"
+  if [ -z "$VAULT_ROOT" ]; then
+    warn "vaults.root is not set — skipping Codex (run with --vault <path>)"
   else
-    mkdir -p "$VAULT_ABS"
-    cp -r "$SCRIPT_DIR/vault-template/." "$VAULT_ABS/"
-    success "Vault created: $VAULT_ABS"
+    for d in "$SCRIPT_DIR/codex/skills/"*/; do
+      name=$(basename "$d")
+      dest="$CODEX_DIR/skills/$name"
+      mkdir -p "$dest"
+      cp -R "$d". "$dest/"
+      find "$dest" -type f -name '*.md' -exec sed -i.bak "s|{{VAULT_ROOT}}|$VAULT_ROOT|g" {} +
+      find "$dest" -type f -name '*.bak' -delete
+      success "skill $name"
+    done
+
+    AGENTS_MD="$CODEX_DIR/AGENTS.md"
+    if [ -f "$AGENTS_MD" ] && grep -q '^## Obsidian Brain' "$AGENTS_MD"; then
+      warn "Obsidian Brain section already in AGENTS.md — skipping"
+    else
+      { echo ""; sed "s|{{VAULT_ROOT}}|$VAULT_ROOT|g" "$SCRIPT_DIR/codex/AGENTS.md"; } >> "$AGENTS_MD"
+      success "Obsidian Brain section appended to AGENTS.md"
+    fi
   fi
-
-  # Write vault config to global settings
-  VAULT_ABS="$VAULT_ABS" python3 - <<'PYEOF'
-import json, os
-
-vault_abs     = os.environ['VAULT_ABS']
-settings_path = os.path.expanduser('~/.claude/settings.json')
-
-with open(settings_path) as f:
-    s = json.load(f)
-
-s.setdefault('vaults', {})
-s['vaults']['root']   = vault_abs
-s['vaults']['active'] = ''
-s['vaults'].setdefault('aliases', {})
-s['vaults']['aliases']['global'] = vault_abs + '/_global'
-
-with open(settings_path, 'w') as f:
-    json.dump(s, f, indent=2)
-    f.write('\n')
-
-print(f"  ✓ vaults.root set: {vault_abs}")
-print(f"  ✓ global alias:    {vault_abs}/_global")
-PYEOF
 fi
 
-# ── 5. Summary ────────────────────────────────────────────────────────────────
+# ── 4. Summary ────────────────────────────────────────────────────────────────
 echo ""
-echo "Done. Claude Brain is installed globally."
+echo "Done. Claude Brain is installed for ${#CONFIG_DIRS[@]} Claude config(s)$([ "$CODEX" = true ] && [ -d "$CODEX_DIR" ] && echo " and Codex")."
 echo ""
-
-if [ -n "$VAULT_PATH" ]; then
-  VAULT_ABS="$(expand_path "$VAULT_PATH")"
-  echo "Vault:    $VAULT_ABS"
-  echo "Commands: $COMMANDS_DIR"
-  echo "Scripts:  $SCRIPTS_DIR"
-  echo "Config:   $HOME/.claude/settings.json"
-  echo ""
-  echo "Next steps:"
-  echo "  1. Open $VAULT_ABS in Obsidian as a vault"
-  echo "  2. In any Claude Code session, run:"
-  echo "       /add-vault <project-name>   — create your first project"
-  echo "       /memory                     — load core memory"
+echo "Vault:  ${VAULT_ROOT:-not configured}"
+echo "Config: $SHARED_SETTINGS"
+echo ""
+if [ -n "$VAULT_ROOT" ]; then
+  echo "Next: /add-vault <project-name> --class <class-id>, then /memory"
 else
-  echo "Commands: $COMMANDS_DIR"
-  echo ""
-  echo "Next: /add-vault --root <path>  — initialize a brain vault"
+  echo "Next: ./install.sh --vault <path>  — initialize a brain vault"
 fi
 echo ""

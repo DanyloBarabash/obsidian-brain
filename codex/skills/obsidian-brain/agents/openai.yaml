@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian Brain"
+  short_description: "Read and update the local Obsidian knowledge base"
+  default_prompt: "Use $obsidian-brain to recall relevant context and save durable knowledge from this task."
