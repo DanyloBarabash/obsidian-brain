@@ -55,6 +55,20 @@ const MAX_TRIANGLES_PER_BUILDING=2500,EPS=1e-3,LOT=27;
   assert(model.chunks.has('ground'),'ground chunk exists');
   assert(triangles/Math.max(1,plan.nodes.length)<MAX_TRIANGLES_PER_BUILDING,`triangle budget (${triangles} for ${plan.nodes.length} buildings)`);
   assert(model.trees.length>=plan.scenery.filter(o=>o.kind==='tree').length,'every planted tree becomes an instance; complexes may add their own');
+  // Landscape (LANDSCAPE.md): trees stay off rivers and built blocks; forest, edge shrubs and both leaf types exist.
+  assert(model.chunks.has('landscape'),'the landscape is built');
+  const pads=plan.districts.flatMap(d=>d.blocks.filter(b=>b.pad).map(b=>b.pad)),inPad=(p,poly)=>{let hit=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)hit=!hit;}return hit;};
+  const gap=(p,pts)=>{let best=Infinity;for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i],dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy||1,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l));best=Math.min(best,Math.hypot(p.x-a.x-dx*t,p.y-a.y-dy*t));}return best;};
+  const wild=model.trees.filter(t=>t.wild);
+  assert(wild.length>0&&wild.some(t=>t.conifer)&&wild.some(t=>!t.conifer)&&wild.some(t=>t.size<10),'forest has conifers, broadleaves and edge shrubs');
+  for(const t of wild){assert(!pads.some(p=>inPad(t,p)),'no tree on a city block');for(const r of plan.rivers)assert(gap(t,r.points)>r.width/2,'no tree in the river');}
+  // Fields only for project reference data: none without such documents, one per document with them.
+  assert.equal(model.picks.filter(p=>p.field).length,0,'no reference data, no fields');
+  const docs=plan.sources.filter(s=>s.available!==false).slice(0,5);
+  const farmed=CityMesh.build({...plan,sources:plan.sources.map(s=>docs.includes(s)?{...s,cityField:true,words:400}:s)},{day:true,triangulate});
+  const fields=farmed.picks.filter(p=>p.field);
+  assert.equal(fields.length,docs.length,'every reference document farms one field');
+  for(const f of fields){assert(docs.some(d=>d.id===f.node.id),'a field opens its own document');assert(!pads.some(p=>inPad({x:f.cx,y:f.cy},p)),'no field inside the city');}
   const dimmed=CityMesh.build(plan,{day:true,triangulate,matches:()=>false});assert.notDeepEqual(dimmed.chunks.get([...dimmed.chunks.keys()].find(k=>k.startsWith('district:'))).lit.colors.slice(0,30),model.chunks.get([...model.chunks.keys()].find(k=>k.startsWith('district:'))).lit.colors.slice(0,30),'the filter dims buildings');
 
   // Optional: the 3000-building benchmark plan, when it has been dumped.

@@ -5,14 +5,16 @@ import {OrbitControls} from './vendor/OrbitControls.js';
 // An orthographic camera tilted 60° from vertical at 45° azimuth reproduces the 2D atlas; this factor matches its scale.
 const ATLAS_SCALE=Math.sqrt(1.5),ATLAS_POLAR=Math.PI/3,ATLAS_AZIMUTH=Math.PI/4;
 const CAMERA_DISTANCE=20000,CAMERA_FAR=80000,MIN_ZOOM=.07*ATLAS_SCALE,MAX_ZOOM=4*ATLAS_SCALE,MIN_POLAR=.12,MAX_POLAR=1.3,ROTATE_STEP=Math.PI/4;
-const AGENT_CAPACITY=64,FOCUS_ZOOM=.85,DISTRICT_ZOOM=[.12,1.6];
+const LIFE={seed:'brain-city-life',swayRound:.07,swayCone:.05,flocks:4,birds:9,flockRing:[1300,1800],boats:5,boatSpan:9000,boatOffshore:[140,520],seaGlints:260,riverGlints:.35,clouds:7,cloudRing:[1800,2600],cloudHeight:650};
+const CLOUD_OPACITY=.68,CLOUD_FADE=[.28,.5],CONFINE={fill:.98};
+const HAZE=[2600,6500],FLY_MS=700,AGENT_CAPACITY=64,FOCUS_ZOOM=.85,DISTRICT_ZOOM=[.12,1.6];
 // The sun casts one shadow map over the whole city: a tight box keeps the texels small; flat ground only receives shadows,
 // and the biases keep roofs and lots free of acne.
 const SHADOW={map:4096,margin:80,height:2000,bias:-.0004,normalBias:.6};
 const SUN_DIRECTION=[-.45,1,.75];
 const LIGHT={
-  day:{sky:'#fffaf0',ground:'#7b8a6a',hemi:1.9,sun:'#fff1d6',sunPower:2.2,clear:'#cfe0e2',crown:'#5f8a55',trunk:'#7a5f45',lamp:'#ebddad'},
-  night:{sky:'#9fb4c8',ground:'#2a3a30',hemi:1.15,sun:'#c9d8ff',sunPower:.55,clear:'#16222b',crown:'#2f4a36',trunk:'#4b3e33',lamp:'#ffe6aa'},
+  day:{sky:'#fffaf0',ground:'#718060',hemi:1.55,sun:'#fff1d6',sunPower:1.8,clear:'#b8cbcf',crown:'#5f8a55',trunk:'#7a5f45',lamp:'#ebddad'},
+  night:{sky:'#9fb4c8',ground:'#34483b',hemi:1.45,sun:'#c9d8ff',sunPower:.68,clear:'#22333f',crown:'#2f4a36',trunk:'#4b3e33',lamp:'#ffe6aa'},
 };
 const COATS=['#3f6979','#b8654b','#d9b35d','#638367','#8c668c','#bd8f85','#e4d4b5','#485775'];
 const PERSON={stride:7,swing:.55,trousers:['#2f3640','#4a3f35','#3b4a5a','#5a5048','#25303a','#6b5d4f'],skin:['#f1c9a5','#e0b08a','#c68a5e','#9a6a45','#6f4a33'],hair:['#2b211b','#5a3b26','#8a6a3f','#c9a46a','#3a3a3a','#a0522d']};
@@ -26,16 +28,76 @@ function create(api){
   const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
   const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-1,1,1,-1,1,CAMERA_FAR);
   const hemi=new THREE.HemisphereLight(),sun=new THREE.DirectionalLight();scene.add(hemi,sun,sun.target);
+  // Haze by depth: land far beyond the view centre fades into the sky colour, so the world has no visible end.
+  scene.fog=new THREE.Fog('#ffffff',CAMERA_DISTANCE+HAZE[0],CAMERA_DISTANCE+HAZE[1]);
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;sun.castShadow=true;sun.shadow.mapSize.set(SHADOW.map,SHADOW.map);sun.shadow.bias=SHADOW.bias;sun.shadow.normalBias=SHADOW.normalBias;
   const controls=new OrbitControls(camera,overlay);
   Object.assign(controls,{enableZoom:false,enableDamping:false,screenSpacePanning:false,minPolarAngle:MIN_POLAR,maxPolarAngle:MAX_POLAR,
     mouseButtons:{LEFT:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.ROTATE,RIGHT:THREE.MOUSE.ROTATE},touches:{ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_ROTATE}});
   const lit=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide}),glow=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide});
-  const statics=new THREE.Group(),agents=new THREE.Group();scene.add(statics,agents);
+  const statics=new THREE.Group(),agents=new THREE.Group(),alive=new THREE.Group();scene.add(statics,agents,alive);
+  // Living landscape: wind in the crowns (vertex shader), flocks of birds, sailboats along the coast, glints on the
+  // water and drifting clouds. Paused or reduced motion freezes all of it with the agents.
+  const wind={value:0};let life=null;
+  function sway(material,amount){
+    material.onBeforeCompile=shader=>{shader.uniforms.uWind=wind;shader.vertexShader='uniform float uWind;\n'+shader.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+      float phase=instanceMatrix[3].x*.013+instanceMatrix[3].z*.017,lean=max(position.y+1.,0.)*${amount.toFixed(3)};
+      transformed.x+=sin(uWind*1.6+phase)*lean;transformed.z+=cos(uWind*1.1+phase*1.3)*lean*.6;
+      #endif`);};
+    return material;
+  }
+  // Flat polygons from points (bird wings, sails), with normals for lighting.
+  function shape(points){const g=new THREE.BufferGeometry().setFromPoints(points);g.computeVertexNormals();return g;}
+  function buildLife(data){
+    dispose(alive);life=null;if(!data?.coast)return;const rnd=seededRandom(LIFE.seed),c=data.coast,centre=data.centre;
+    const birdGeometry=merged([[shape([new THREE.Vector3(0,0,0),new THREE.Vector3(-1.5,0,-7),new THREE.Vector3(1.5,0,0),new THREE.Vector3(0,0,0),new THREE.Vector3(1.5,0,0),new THREE.Vector3(-1.5,0,7)]),'#2d3530']]);
+    const birds=new THREE.InstancedMesh(birdGeometry,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide}),LIFE.flocks*LIFE.birds);
+    const flocks=Array.from({length:LIFE.flocks},()=>{const a=rnd()*Math.PI*2,r=LIFE.flockRing[0]+rnd()*LIFE.flockRing[1];return {x:centre.x+Math.cos(a)*r,y:centre.y+Math.sin(a)*r,radius:220+rnd()*380,speed:(.12+rnd()*.1)*(rnd()<.5?-1:1),phase:rnd()*6,height:150+rnd()*120,members:Array.from({length:LIFE.birds},()=>({dx:(rnd()-.5)*90,dy:(rnd()-.5)*90,dz:(rnd()-.5)*30,flap:rnd()*6}))};});
+    const sail=merged([[box(26,4,9,0,2,0),'#7a5a3e'],[box(22,1,7.4,0,4.4,0),'#c9a77c'],[box(.8,26,.8,1,17,0),'#5a4a3a'],
+      [shape([new THREE.Vector3(1.5,6,0),new THREE.Vector3(1.5,29,0),new THREE.Vector3(12,6,0)]),'#f4efe2'],
+      [shape([new THREE.Vector3(.5,7,0),new THREE.Vector3(.5,24,0),new THREE.Vector3(-8,7,0)]),'#e9dcc4']]);
+    const boats=new THREE.InstancedMesh(sail,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide}),LIFE.boats);
+    const shore=data.shore||[],lane=[0];for(let k=1;k<shore.length;k++)lane.push(lane[k-1]+Math.hypot(shore[k].x-shore[k-1].x,shore[k].y-shore[k-1].y));
+    const fleet=Array.from({length:LIFE.boats},()=>({s:rnd()*lane.at(-1),off:LIFE.boatOffshore[0]+rnd()*LIFE.boatOffshore[1],speed:(10+rnd()*14)*(rnd()<.5?-1:1),bob:rnd()*6}));
+    const spots=[];for(let i=0;i<LIFE.seaGlints&&shore.length;i++){const p=shore[Math.floor(rnd()*shore.length)],d=40+rnd()*900;spots.push({x:p.x+c.down.x*d,y:p.y+c.down.y*d,z:ground-.1,size:4+rnd()*5,phase:rnd()*6});}
+    for(const w of (data.water||[]).filter(()=>rnd()<LIFE.riverGlints))spots.push({x:w.x+(rnd()-.5)*w.w*.5,y:w.y+(rnd()-.5)*w.w*.5,z:ground-.3,size:2+rnd()*2.5,phase:rnd()*6});
+    const glints=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2).rotateY(Math.PI/4),new THREE.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:.75,depthWrite:false}),spots.length);
+    const puff=merged([[new THREE.IcosahedronGeometry(40,1),'#ffffff'],[new THREE.IcosahedronGeometry(30,1).translate(45,-6,10),'#ffffff'],[new THREE.IcosahedronGeometry(28,1).translate(-42,-8,-6),'#ffffff'],[new THREE.IcosahedronGeometry(24,1).translate(10,8,-30),'#ffffff']]);
+    const clouds=new THREE.InstancedMesh(puff,new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:CLOUD_OPACITY,depthWrite:false}),LIFE.clouds);
+    const sky=Array.from({length:LIFE.clouds},()=>({a:rnd()*Math.PI*2,r:LIFE.cloudRing[0]+rnd()*LIFE.cloudRing[1],h:LIFE.cloudHeight+rnd()*160,scale:1.8+rnd()*1.6,speed:.006+rnd()*.008}));
+    for(const m of [birds,boats,glints,clouds]){m.frustumCulled=false;alive.add(m);}boats.castShadow=true;
+    life={birds,flocks,boats,fleet,coast:c,shore,lane,glints,spots,clouds,sky,centre,view:data.view};updateLife(0);confine();
+  }
+  function updateLife(t){
+    if(!life)return;const {birds,flocks,boats,fleet,coast:c,shore,lane,glints,spots,clouds,sky,centre}=life;let i=0;
+    birds.visible=state.day;
+    for(const f of flocks){const a=t*f.speed+f.phase,cx=f.x+Math.cos(a)*f.radius,cy=f.y+Math.sin(a)*f.radius,heading=a+Math.sign(f.speed)*Math.PI/2;
+      for(const b of f.members){const flap=.25+Math.abs(Math.sin(t*9+b.flap))*1.1;position.set(cx+b.dx,ground+f.height+b.dz+Math.sin(t*2+b.flap)*4,cy+b.dy);quaternion.setFromAxisAngle(up,-heading);size.set(1,1,flap);birds.setMatrixAt(i++,matrix.compose(position,quaternion,size));}}
+    const total=lane.at(-1)||1;
+    fleet.forEach((b,k)=>{
+      // Boats sail along the shore at a fixed distance offshore, turning with its bays.
+      const s=((b.s+t*b.speed)%total+total)%total;let j=1;while(j<lane.length-1&&lane[j]<s)j++;const p=shore[j-1],q=shore[j],f=(s-lane[j-1])/((lane[j]-lane[j-1])||1);
+      const dx=(q.x-p.x)*Math.sign(b.speed),dy=(q.y-p.y)*Math.sign(b.speed);
+      position.set(p.x+(q.x-p.x)*f+c.down.x*b.off,ground+.6+Math.sin(t*1.7+b.bob)*.6,p.y+(q.y-p.y)*f+c.down.y*b.off);
+      quaternion.setFromEuler(euler.set(Math.sin(t*1.3+b.bob)*.05,-Math.atan2(dy,dx),0));size.set(1,1,1);boats.setMatrixAt(k,matrix.compose(position,quaternion,size));});
+    spots.forEach((g,k)=>{const shine=Math.max(0,Math.sin(t*2.2+g.phase))**3*g.size;position.set(g.x,g.z,g.y);quaternion.identity();size.set(shine||1e-3,1,shine||1e-3);glints.setMatrixAt(k,matrix.compose(position,quaternion,size));});
+    glints.material.opacity=state.day?.75:.35;
+    sky.forEach((s,k)=>{const a=s.a+t*s.speed;position.set(centre.x+Math.cos(a)*s.r,ground+s.h,centre.y+Math.sin(a)*s.r);quaternion.identity();size.set(s.scale,s.scale*.45,s.scale);clouds.setMatrixAt(k,matrix.compose(position,quaternion,size));});
+    for(const m of [birds,boats,glints,clouds])m.instanceMatrix.needsUpdate=true;
+    fadeClouds();
+  }
+  function fadeClouds(){
+    // Clouds belong to the overview: they fade out as the camera comes closer and are gone at street level.
+    if(!life)return;const z=camera.zoom/ATLAS_SCALE,k=THREE.MathUtils.clamp((CLOUD_FADE[1]-z)/(CLOUD_FADE[1]-CLOUD_FADE[0]),0,1);
+    life.clouds.material.opacity=CLOUD_OPACITY*k;life.clouds.visible=k>.01;
+  }
+  function seededRandom(seed){let a=hash(seed);return ()=>{a=(a+0x6D2B79F5)|0;let x=Math.imul(a^(a>>>15),1|a);x=(x+Math.imul(x^(x>>>7),61|x))^x;return ((x^(x>>>14))>>>0)/4294967296;};}
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),scratch=new THREE.Vector3(),matrix=new THREE.Matrix4(),quaternion=new THREE.Quaternion(),size=new THREE.Vector3(),position=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),colourOf=new THREE.Color();
   const outline=new THREE.BoxGeometry(1,1,1),edges=new THREE.EdgesGeometry(outline),selectedBox=new THREE.LineSegments(edges,new THREE.LineBasicMaterial({color:'#f3e3a3'})),hoveredBox=new THREE.LineSegments(edges,new THREE.LineBasicMaterial({color:'#ffffff',transparent:true,opacity:.6}));
   for(const b of [selectedBox,hoveredBox]){b.matrixAutoUpdate=false;b.visible=false;scene.add(b);}
-  let active=false,key=null,lightKey=null,dirty=true,width=1,height=1,picks=[],pickIndex=new Map(),proxies=null,people=null,arms=null,legs=null,heads=null,hair=null,cars=null,cabins=null,roofs=null,agentList=[],highlight='',ground=14;
+  let key=null,lightKey=null,dirty=true,width=1,height=1,picks=[],pickIndex=new Map(),proxies=null,people=null,arms=null,legs=null,heads=null,hair=null,cars=null,cabins=null,roofs=null,agentList=[],highlight='',ground=14;
   const headings=new Map(),euler=new THREE.Euler(),base=new THREE.Matrix4(),part=new THREE.Matrix4(),limb=new THREE.Matrix4(),turnZ=new THREE.Matrix4();
   const glass=new THREE.MeshLambertMaterial({color:BUS.glassDay});
 
@@ -51,12 +113,12 @@ function create(api){
     dispose(statics);const plan=state.urban,model=CityMesh.build(plan,{day:state.day,matches:api.matches,triangulate}),palette=state.day?LIGHT.day:LIGHT.night;ground=model.ground;
     for(const [name,chunk] of model.chunks)for(const [arrays,material] of [[chunk.lit,lit],[chunk.glow,glow]]){if(!arrays.positions.length)continue;
       const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(arrays.positions,3));g.setAttribute('normal',new THREE.BufferAttribute(arrays.normals,3));g.setAttribute('color',new THREE.BufferAttribute(arrays.colors,3));g.computeBoundingSphere();
-      const mesh=new THREE.Mesh(g,material);mesh.matrixAutoUpdate=false;mesh.castShadow=material===lit&&name!=='ground'&&name!=='landscape';mesh.receiveShadow=material===lit;statics.add(mesh);}
+      const mesh=new THREE.Mesh(g,material);mesh.matrixAutoUpdate=false;mesh.castShadow=material===lit&&name!=='ground'&&name!=='landscape';mesh.receiveShadow=material===lit&&name!=='landscape';statics.add(mesh);}
     fitShadow(plan);
     // Trees and lamps: one instanced draw per part.
     const trunks=instanced(new THREE.CylinderGeometry(.09,.13,1,5).translate(0,.5,0),new THREE.MeshLambertMaterial({color:palette.trunk}),model.trees.length);
     const round=model.trees.filter(t=>!t.conifer),pointed=model.trees.filter(t=>t.conifer);
-    const crowns=instanced(new THREE.IcosahedronGeometry(1,0),new THREE.MeshLambertMaterial({color:'#ffffff'}),round.length),cones=instanced(new THREE.ConeGeometry(1,1,6).translate(0,.5,0),new THREE.MeshLambertMaterial({color:'#ffffff'}),pointed.length);
+    const crowns=instanced(new THREE.IcosahedronGeometry(1,0),sway(new THREE.MeshLambertMaterial({color:'#ffffff'}),LIFE.swayRound),round.length),cones=instanced(new THREE.ConeGeometry(1,1,6).translate(0,.5,0),sway(new THREE.MeshLambertMaterial({color:'#ffffff'}),LIFE.swayCone),pointed.length);
     model.trees.forEach((t,i)=>{matrix.makeScale(t.size,t.size*.9,t.size).setPosition(t.x,ground,t.y);trunks.setMatrixAt(i,matrix);});
     const crown=new THREE.Color(palette.crown);
     round.forEach((t,i)=>{matrix.makeScale(t.size*.75,t.size*.8,t.size*.75).setPosition(t.x,ground+t.size*1.45,t.y);crowns.setMatrixAt(i,matrix);crowns.setColorAt(i,colourOf.copy(crown).multiplyScalar((t.tone??1)*(.85+(hash(t.x+':'+t.y)%30)/100)));});
@@ -66,7 +128,8 @@ function create(api){
     for(const m of [trunks,crowns,cones,poles,bulbs]){m.computeBoundingSphere();m.castShadow=true;m.receiveShadow=m!==bulbs;statics.add(m);}
     // Invisible boxes, one per building, answer pointer picks without testing the merged triangles.
     picks=model.picks;pickIndex=new Map();proxies=instanced(outline,new THREE.MeshBasicMaterial({visible:false}),picks.length);
-    picks.forEach((p,i)=>{proxies.setMatrixAt(i,boxMatrix(p,matrix));pickIndex.set(p.node.physicalId||p.node.id,p);pickIndex.set(p.node.id,p);});proxies.computeBoundingSphere();statics.add(proxies);
+    picks.forEach((p,i)=>{proxies.setMatrixAt(i,boxMatrix(p,matrix));if(!p.field){pickIndex.set(p.node.physicalId||p.node.id,p);pickIndex.set(p.node.id,p);}});proxies.computeBoundingSphere();statics.add(proxies);
+    buildLife(model.life);
     highlight='';dirty=true;
   }
   function fitShadow(plan){
@@ -75,7 +138,7 @@ function create(api){
     Object.assign(sun.shadow.camera,{left:-r,right:r,top:r,bottom:-r,near:1,far:SHADOW.height*2});sun.shadow.camera.updateProjectionMatrix();sun.shadow.needsUpdate=true;
   }
   function applyLight(){
-    const p=state.day?LIGHT.day:LIGHT.night;hemi.color.set(p.sky);hemi.groundColor.set(p.ground);hemi.intensity=p.hemi;sun.color.set(p.sun);sun.intensity=p.sunPower;renderer.setClearColor(p.clear);glass.color.set(state.day?BUS.glassDay:'#3a4a50');glass.emissive.set(state.day?'#000000':BUS.glassNight);glass.emissiveIntensity=state.day?0:.85;dirty=true;
+    const p=state.day?LIGHT.day:LIGHT.night;hemi.color.set(p.sky);hemi.groundColor.set(p.ground);hemi.intensity=p.hemi;sun.color.set(p.sun);sun.intensity=p.sunPower;renderer.setClearColor(p.clear);scene.fog.color.set(p.clear);glass.color.set(state.day?BUS.glassDay:'#3a4a50');glass.emissive.set(state.day?'#000000':BUS.glassNight);glass.emissiveIntensity=state.day?0:.85;dirty=true;
   }
   function merged(parts){
     // Joins coloured parts into one geometry, so a detailed model still draws once per instance set.
@@ -160,16 +223,42 @@ function create(api){
     shiftScreen(margins.left+usableW/2-width/2,margins.top+usableH/2-height/2);api.onZoom?.(camera.zoom/ATLAS_SCALE);
   }
 
-  controls.addEventListener('change',()=>{dirty=true;});
+  // The view stays inside the landscape: the zoom can't open wider than it, and the centre can't drift past its edge.
+  let confining=false;
+  function confine(){
+    if(confining||!life?.view)return;confining=true;
+    const reachOf=zoom=>Math.max(width,height/Math.cos(spherical().phi||ATLAS_POLAR))/2/zoom;
+    const minZoom=Math.max(MIN_ZOOM,Math.max(width,height*2)/2/(life.view*CONFINE.fill));
+    if(camera.zoom<minZoom){camera.zoom=minZoom;camera.updateProjectionMatrix();api.onZoom?.(camera.zoom/ATLAS_SCALE);}
+    const room=Math.max(0,life.view-reachOf(camera.zoom)),dx=controls.target.x-life.centre.x,dz=controls.target.z-life.centre.y,d=Math.hypot(dx,dz);
+    if(d>room){const k=(d-room)/d,shift=new THREE.Vector3(-dx*k,0,-dz*k);camera.position.add(shift);controls.target.add(shift);controls.update();}
+    confining=false;dirty=true;
+  }
+  controls.addEventListener('change',()=>{dirty=true;confine();});
+  // Focus moves fly the camera over FLY_MS instead of jumping; any hand on the controls takes over at once.
+  let flight=null;
+  controls.addEventListener('start',()=>{flight=null;});
+  function fly(move){
+    const from={p:camera.position.clone(),t:controls.target.clone(),z:camera.zoom};move();
+    if(from.p.lengthSq()===0)return;
+    const to={p:camera.position.clone(),t:controls.target.clone(),z:camera.zoom};
+    camera.position.copy(from.p);controls.target.copy(from.t);camera.zoom=from.z;camera.updateProjectionMatrix();camera.lookAt(from.t);
+    flight={from,to,start:performance.now()};dirty=true;
+  }
+  function flyStep(){
+    if(!flight)return;const k=Math.min(1,(performance.now()-flight.start)/FLY_MS),e=k<.5?4*k*k*k:1-(-2*k+2)**3/2,{from,to}=flight;
+    camera.position.lerpVectors(from.p,to.p,e);controls.target.lerpVectors(from.t,to.t,e);camera.zoom=from.z*Math.pow(to.z/from.z,e);camera.updateProjectionMatrix();camera.lookAt(controls.target);
+    if(k===1){flight=null;controls.update();confine();}dirty=true;api.onZoom?.(camera.zoom/ATLAS_SCALE);
+  }
   return {
-    get active(){return active;},
-    setActive(on){active=on;canvas.hidden=!on;controls.enabled=on;if(on){dirty=true;key=null;}},
     resize(w,h,ratio){width=w;height=h;renderer.setPixelRatio(ratio);renderer.setSize(w,h,false);Object.assign(camera,{left:-w/2,right:w/2,top:h/2,bottom:-h/2});camera.updateProjectionMatrix();dirty=true;},
     frame(){
-      if(!active||!state.urban)return;
+      if(!state.urban)return;
       const next=[api.planVersion(),state.day,state.filter,state.query].join('|');if(next!==key){key=next;rebuild();}
       if(lightKey!==state.day){lightKey=state.day;applyLight();}
+      flyStep();
       const moving=!state.paused&&!state.reduced;if(moving||!people)updateAgents();updateHighlight();
+      if(moving){const t=performance.now()/1000;wind.value=t;updateLife(t);}else fadeClouds();
       if(dirty||moving){renderer.render(scene,camera);dirty=false;}
     },
     project(x,y,z=0){scratch.set(x,z,y).project(camera);return {x:(scratch.x+1)/2*width,y:(1-scratch.y)/2*height};},
@@ -177,22 +266,25 @@ function create(api){
       pointer.set(x/width*2-1,-(y/height)*2+1);raycaster.setFromCamera(pointer,camera);
       const found=raycaster.intersectObjects([people,proxies].filter(Boolean),false)[0];if(!found)return null;
       if(found.object===people){const r=agentList[found.instanceId];return r?{node:r.node,person:true}:null;}
-      const p=picks[found.instanceId];return p?{node:p.node,person:false}:null;
+      const p=picks[found.instanceId];return p?{node:p.node,person:false,field:!!p.field}:null;
     },
     zoom(factor,x=width*.6,y=height*.5){
       // Zoom towards the cursor: the ground point under it stays put.
-      const before=groundAt(x,y);camera.zoom=THREE.MathUtils.clamp(camera.zoom*factor,MIN_ZOOM,MAX_ZOOM);camera.updateProjectionMatrix();camera.updateMatrixWorld();const after=groundAt(x,y);
-      if(before&&after){const shift=before.sub(after);camera.position.add(shift);controls.target.add(shift);controls.update();}dirty=true;api.onZoom?.(camera.zoom/ATLAS_SCALE);
+      flight=null;const before=groundAt(x,y);camera.zoom=THREE.MathUtils.clamp(camera.zoom*factor,MIN_ZOOM,MAX_ZOOM);camera.updateProjectionMatrix();camera.updateMatrixWorld();const after=groundAt(x,y);
+      if(before&&after){const shift=before.sub(after);camera.position.add(shift);controls.target.add(shift);controls.update();}confine();dirty=true;api.onZoom?.(camera.zoom/ATLAS_SCALE);
     },
-    rotate(step){const s=spherical();aim(controls.target.clone(),s.theta+step*ROTATE_STEP,s.phi);},
-    fit(margins){const ds=state.districts;if(!ds.length)return;aim(controls.target.clone(),ATLAS_AZIMUTH,ATLAS_POLAR);frameBox(Math.min(...ds.map(d=>d.minX)),Math.max(...ds.map(d=>d.maxX)),Math.min(...ds.map(d=>d.minY)),Math.max(...ds.map(d=>d.maxY))+50,100,margins,[MIN_ZOOM,1.1*ATLAS_SCALE]);},
-    focusDistrict(d,margins){frameBox(d.minX,d.maxX,d.minY,d.maxY,100,margins,DISTRICT_ZOOM.map(z=>z*ATLAS_SCALE));},
-    focusNode(n,margins){
+    rotate(step){flight=null;const s=spherical();aim(controls.target.clone(),s.theta+step*ROTATE_STEP,s.phi);},
+    fit(margins){const ds=state.districts;if(!ds.length)return;flight=null;fly(()=>{aim(controls.target.clone(),ATLAS_AZIMUTH,ATLAS_POLAR);frameBox(Math.min(...ds.map(d=>d.minX)),Math.max(...ds.map(d=>d.maxX)),Math.min(...ds.map(d=>d.minY)),Math.max(...ds.map(d=>d.maxY))+50,100,margins,[MIN_ZOOM,1.1*ATLAS_SCALE]);});},
+    focusDistrict(d,margins){flight=null;fly(()=>frameBox(d.minX,d.maxX,d.minY,d.maxY,100,margins,DISTRICT_ZOOM.map(z=>z*ATLAS_SCALE)));},
+    focusNode(n,margins){flight=null;fly(()=>{
       const s=spherical();camera.zoom=Math.max(FOCUS_ZOOM*ATLAS_SCALE,camera.zoom);camera.updateProjectionMatrix();aim(new THREE.Vector3(n.rcx??n.x+n.w/2,ground+n.h/2,n.rcy??n.y+n.d/2),s.theta,s.phi);
       shiftScreen(margins.left+(width-margins.left-margins.right)/2-width/2,0);api.onZoom?.(camera.zoom/ATLAS_SCALE);
-    },
+    });},
     zoomLevel(){return camera.zoom/ATLAS_SCALE;},
   };
 }
 // The app owns state and UI; it receives the 3D view once WebGL2 and the module are available.
-if(window.WebGL2RenderingContext&&typeof window.attach3D==='function')window.attach3D(create);
+if(typeof window.attach3D==='function'){
+  if(window.WebGL2RenderingContext)window.attach3D(create);
+  else window.show3DError();
+}

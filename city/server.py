@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 import webbrowser
 from city_state import CityState
 from preparation import Preparation
-from classification import TOPICS, classify, project_profile
+from classification import TOPICS, classify, project_profile, reference_data
 from market import READER_URL, Market, ReaderOffline
 
 WEB = Path(__file__).parent / "web"
@@ -104,6 +104,36 @@ class Vault:
             raise ValueError("Symlinks are excluded")
         return candidate.read_text(encoding="utf-8", errors="replace")
 
+    def read_asset(self, path, note=""):
+        """Read a vault illustration while excluding hidden files, symlinks and ambiguous names."""
+        types={".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".gif":"image/gif",
+               ".webp":"image/webp",".avif":"image/avif",".svg":"image/svg+xml"}
+        if not path or Path(path).is_absolute() or "\\" in path or ":" in path:
+            raise ValueError("Invalid illustration path")
+        candidates=[self.root / Path(note).parent / path,self.root / path]
+        if "/" not in path:
+            matches=[]
+            for directory,folders,names in os.walk(self.root,followlinks=False):
+                folders[:]=[f for f in folders if not f.startswith(".") and not (Path(directory)/f).is_symlink()]
+                if path in names:
+                    matches.append(Path(directory)/path)
+            if len(matches)==1:
+                candidates+=matches
+        for candidate in candidates:
+            if not candidate.resolve().is_relative_to(self.root):
+                raise ValueError("Illustration must stay inside the vault")
+            if any(p.startswith(".") and p not in (".","..") for p in candidate.relative_to(self.root).parts):
+                raise ValueError("Hidden files are excluded")
+            if any(p.is_symlink() for p in [candidate,*candidate.parents] if p!=self.root and p.is_relative_to(self.root)):
+                raise ValueError("Symlinks are excluded")
+            if candidate.suffix.lower() not in types:
+                raise ValueError("Unsupported illustration type")
+            if candidate.is_file():
+                if candidate.stat().st_size>20*1024*1024:
+                    raise ValueError("Illustration exceeds 20 MB")
+                return candidate.read_bytes(),types[candidate.suffix.lower()]
+        raise FileNotFoundError(path)
+
     def build(self):
         """Return a fresh graph only when source files have changed."""
         with self.lock:
@@ -179,6 +209,13 @@ class Vault:
                     "sourceId": meta.get("id"), "contentRevision": note["contentRevision"],
                     "archived": meta.get("status", meta.get("stage", "")).lower() in ("archived", "archive"),
                     "summary": meta.get("summary", ""), "uri": f"obsidian://open?vault={quote(self.root.name, safe='')}&file={quote(path, safe='')}"})
+            # Project reference data also farms a field outside the city; a catalogue is many documents in one folder.
+            folders = {}
+            for node in nodes:
+                if "/documents/" in node["id"]:
+                    folders[str(Path(node["id"]).parent)] = folders.get(str(Path(node["id"]).parent), 0)+1
+            for node in nodes:
+                node["cityField"] = reference_data(node["id"], raw[node["id"]]["meta"], node["title"], folders.get(str(Path(node["id"]).parent), 0), node["cityRole"])
             # Resolve wikilinks and local Markdown links, retaining only actual files.
             stems = {}
             for path in raw:
@@ -301,7 +338,11 @@ def handler_for(vault, market=None):
                 elif route.path == "/api/note":
                     path = parse_qs(route.query).get("path", [""])[0]
                     self.respond(json.dumps({"path": path, "content": vault.read_note(path)}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
-                elif route.path in ("/", "/index.html", "/app.js", "/city-plan.js", "/details.js", "/preparation.js", "/preparation.css", "/style.css", "/market.js", "/city-mesh.js", "/scene3d.js", "/vendor/three.module.min.js", "/vendor/OrbitControls.js"):
+                elif route.path == "/api/asset":
+                    query=parse_qs(route.query)
+                    content,mime=vault.read_asset(query.get("path",[""])[0],query.get("note",[""])[0])
+                    self.respond(content,mime)
+                elif route.path in ("/", "/index.html", "/app.js", "/city-plan.js", "/details.js", "/preparation.js", "/preparation.css", "/style.css", "/market.js", "/city-mesh.js", "/scene3d.js", "/document-reader.js", "/document-reader.css", "/vendor/marked.min.js", "/vendor/purify.min.js", "/vendor/mermaid.min.js", "/vendor/three.module.min.js", "/vendor/OrbitControls.js"):
                     name = "index.html" if route.path == "/" else route.path[1:]
                     mime = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[name.rsplit(".", 1)[1]]
                     self.respond((WEB / name).read_bytes(), mime + "; charset=utf-8")
@@ -363,7 +404,7 @@ def handler_for(vault, market=None):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
             self.end_headers()
             self.wfile.write(content)
 

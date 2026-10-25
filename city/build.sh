@@ -9,7 +9,7 @@ if [[ ! -x "$CITY_APP/Contents/MacOS/BrainCity" || "$CITY_DIR/Window.swift" -nt 
   CITY_SYSTEM_SDK="${CITY_SDK:h}/MacOSX${CITY_OS_MAJOR}.sdk"
   # Prefer the installed OS SDK when a newer beta SDK exceeds this compiler.
   [[ ! -d "$CITY_SYSTEM_SDK" ]] || CITY_SDK="$CITY_SYSTEM_SDK"
-  swiftc -sdk "$CITY_SDK" "$CITY_DIR/Window.swift" -o "$CITY_APP/Contents/MacOS/BrainCity" -framework Cocoa -framework WebKit
+  swiftc -sdk "$CITY_SDK" "$CITY_DIR/Window.swift" -o "$CITY_APP/Contents/MacOS/BrainCity" -framework Cocoa -framework WebKit -framework CoreLocation
 fi
 cp "$CITY_DIR/server.py" "$CITY_APP/Contents/Resources/server.py"
 cp "$CITY_DIR/city_state.py" "$CITY_APP/Contents/Resources/city_state.py"
@@ -28,6 +28,7 @@ if [[ -f "$CITY_DIR/build/verification/simulation.json" ]]; then
   cp "$CITY_DIR/build/verification/simulation.json" "$CITY_APP/Contents/Resources/build/verification/simulation.json"
 fi
 cp -R "$CITY_DIR/web/"* "$CITY_APP/Contents/Resources/web/"
+rm -f "$CITY_APP/Contents/Resources/web/details.js" "$CITY_APP/Contents/Resources/tests/test_details.js"
 cp "$CITY_DIR/assets/BrainCity.icns" "$CITY_APP/Contents/Resources/BrainCity.icns"
 cat > "$CITY_APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -40,6 +41,8 @@ cat > "$CITY_APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>2</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSLocationUsageDescription</key><string>Місце розташування потрібне, щоб перемикати день і ніч у місті за сходом та заходом Сонця.</string>
+<key>NSLocationWhenInUseUsageDescription</key><string>Місце розташування потрібне лише для локального визначення світлового дня.</string>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>
 PLIST

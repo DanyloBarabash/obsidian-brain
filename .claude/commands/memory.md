@@ -1,8 +1,8 @@
 Load core memory into the current session.
 
 Usage:
-  /memory           — load active project MEMORY.md
-  /memory global    — load global memory MEMORY.md
+  /memory           — load the class hub and active project hub
+  /memory global    — load global.md
 
 ## Steps
 

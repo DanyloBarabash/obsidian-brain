@@ -10,7 +10,7 @@ from .precincts import sync as sync_precincts
 FACILITIES = {
     "sports": ("stadium", "Стадіон і тренувальний центр"),
     "science": ("campus", "Науковий кампус"),
-    "technology": ("innovation-centre", "Центр технологій"),
+    "technology": ("innovation-centre", "Технопарк і центр винахідництва"),
     "energy": ("solar-centre", "Енергетичний центр"),
     "media": ("media-centre", "Медіацентр"),
     "games": ("arts-centre", "Творчий центр"),

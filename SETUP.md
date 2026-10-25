@@ -1,6 +1,6 @@
-# Getting Started with Claude Brain
+# Getting Started with Obsidian Brain
 
-Claude Brain gives Claude a persistent memory across all your sessions.
+Obsidian Brain gives Claude Code and Codex a shared persistent memory across all your sessions.
 It stores everything in a folder of text files that you can also browse in Obsidian.
 
 **Time to set up: ~5 minutes.**
@@ -15,7 +15,7 @@ It stores everything in a folder of text files that you can also browse in Obsid
 
 ---
 
-## Step 1 — Download Claude Brain
+## Step 1 — Download Obsidian Brain
 
 Open your terminal and run:
 
@@ -56,7 +56,7 @@ Python 3 installed (`python3 --version` in the terminal).
 4. Click **Open**
 
 You'll see the folder structure appear on the left. It looks empty now — that's normal.
-Everything Claude Brain writes will appear here automatically.
+Everything your agents write will appear here automatically.
 
 ---
 
@@ -66,10 +66,11 @@ Open Claude Code (in your terminal or the desktop app).
 In the chat, type:
 
 ```
-/add-vault my-first-project
+/add-vault my-first-project --class personal-tools
 ```
 
-Replace `my-first-project` with whatever you're working on — `work`, `research`, `side-project`, anything.
+Replace `my-first-project` with whatever you're working on. Every project belongs to one class
+(a group in `classes/`); if the class does not exist yet, Claude offers to create it.
 
 Claude will confirm the project was created.
 
@@ -106,6 +107,9 @@ You don't need to memorize all of these — just `/memory` and `/save-session` t
 | `/note write something here` | Saves a quick note to memory |
 | `/add-vault project-name` | Creates a new project workspace |
 | `/switch-vault project-name` | Switches to a different project |
+| `/retro` | Reviews recent sessions and suggests memory updates |
+
+In Codex, just ask in plain words: "запиши це в Brain", "знайди в Brain усе про …".
 
 ---
 

@@ -1,10 +1,13 @@
 import Cocoa
 import WebKit
+import CoreLocation
 
 /// A dedicated local window; Markdown stays behind the loopback server.
-final class CityApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
+final class CityApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate, WKScriptMessageHandler, CLLocationManagerDelegate {
     var window: NSWindow!
     var webView: WKWebView!
+    let locationManager = CLLocationManager()
+    var locationRequested = false
     let port = ProcessInfo.processInfo.environment["BRAIN_CITY_PORT"] ?? "8765"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -33,7 +36,11 @@ final class CityApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUI
             window.setContentSize(NSSize(width: min(1440, frame.width - 70), height: min(960, frame.height - 70)))
         }
         window.center()
-        webView = WKWebView(frame: .zero)
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(self, name: "cityLocation")
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
+        webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         window.contentView = webView
@@ -90,6 +97,41 @@ final class CityApp: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUI
     }
 
     @objc func reload() { webView.load(URLRequest(url: URL(string: "http://127.0.0.1:\(port)")!)) }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "cityLocation", message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.protocol == "http", message.frameInfo.securityOrigin.host == "127.0.0.1",
+              message.frameInfo.securityOrigin.port == Int(port), message.body as? String == "request" else { return }
+        locationRequested = true
+        requestSystemLocation()
+    }
+
+    func requestSystemLocation() {
+        guard CLLocationManager.locationServicesEnabled() else { sendLocation(["error": "Увімкни служби геолокації macOS для дня й ночі за Сонцем."]); return }
+        switch locationManager.authorizationStatus {
+        case .notDetermined: locationManager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse: locationManager.requestLocation()
+        default: sendLocation(["error": "Дозволь Brain City доступ до геолокації в налаштуваннях macOS."])
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if locationRequested { requestSystemLocation() }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        sendLocation(["latitude": location.coordinate.latitude, "longitude": location.coordinate.longitude])
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        sendLocation(["error": "Не вдалося отримати системне місце розташування. Спробуй ще раз кнопкою дня / ночі."])
+    }
+
+    func sendLocation(_ payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('city-location', {detail: \(json)}));", completionHandler: nil)
+    }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }

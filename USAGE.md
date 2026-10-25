@@ -1,25 +1,25 @@
-# Claude Brain — Usage Guide
+# Obsidian Brain — Usage Guide
 
 ---
 
 ## How it works
 
-Claude Brain stores everything as plain Markdown files in a single folder called the **brain vault**.
-Claude Code skills read and write those files directly using standard file tools.
+Obsidian Brain stores everything as plain Markdown files in a single folder called the **brain vault**.
+Claude Code commands and the Codex `obsidian-brain` skill read and write those files directly.
 
 Obsidian is optional — it is just a viewer for the same folder.
 Open the `brain/` root in Obsidian and you get graph view, backlinks, and search on top
-of everything Claude Brain writes. Nothing special to configure — it just works because
+of everything Obsidian Brain writes. Nothing special to configure — it just works because
 both tools use the same files.
 
 ```text
 brain/  (plain Markdown files, single Obsidian vault)
-├── Claude Brain reads/writes here via skills
+├── Obsidian Brain reads/writes here via skills
 └── Obsidian opens brain/ as a vault — sees everything
 ```
 
-You do not need Obsidian running for Claude Brain to work.
-You do not need Claude Brain running for Obsidian to work.
+You do not need Obsidian running for Obsidian Brain to work.
+You do not need Obsidian Brain running for Obsidian to work.
 They coexist on the same files.
 
 ---
@@ -39,14 +39,15 @@ cd obsidian-brain
 | Flag | Description |
 |---|---|
 | `--vault <path>` | Initialize the root brain vault at this path and register it |
-| `--local` | Install commands to `./.claude/commands/` instead of `~/.claude/commands/` |
+| `--config-dir <dir>` | Install only into this Claude config (repeatable); default is every detected config |
+| `--no-codex` | Skip the Codex skill and `AGENTS.md` section |
 | `--force` | Overwrite existing command files |
 
 The `--vault` flag creates the root `brain/` folder (or whatever path you choose) and writes
-the `vaults.root` entry in `.claude/settings.json`. There is no `--type global` flag —
-the single vault contains both global memory and all projects.
+the `vaults.root` entry in `~/.claude/settings.json` — the one config every agent reads.
 
-After install, open a Claude Code session in any project — all commands are available.
+Without flags the installer updates `~/.claude`, every `~/.claude-*` config, every
+`~/.claude-envs/*/.claude`, and `~/.codex`. Re-run `./install.sh --force` after pulling updates.
 
 ---
 
@@ -59,7 +60,7 @@ After install, open a Claude Code session in any project — all commands are av
 Because everything lives inside one vault root, backlinks work across global and project notes,
 the graph view shows the full picture, and MCP is configured once for `brain/`.
 
-Every time Claude Brain writes a note, it appears in Obsidian automatically.
+Every time Obsidian Brain writes a note, it appears in Obsidian automatically.
 No plugins or sync required for basic use.
 
 ---
@@ -68,7 +69,7 @@ No plugins or sync required for basic use.
 
 ```text
 1. Initialize root vault  →  /add-vault --root ~/brain
-2. Create first project   →  /add-vault my-project
+2. Create first project   →  /add-vault my-project --class <class-id>
 3. Load core memory       →  /memory
 4. Work on your project
 5. Save the session       →  /save-session
@@ -84,8 +85,8 @@ No plugins or sync required for basic use.
 Load the active project's core memory into the current session.
 
 ```text
-/memory           — load active project MEMORY.md (Tier 0, ≤ 1 500 tokens)
-/memory global    — load the global _global/memory/MEMORY.md
+/memory           — load the class hub and the active project hub
+/memory global    — load global.md
 ```
 
 Run this at the start of every session to restore context.
@@ -107,8 +108,8 @@ Claude reads the current conversation from context and extracts:
 - **Outcomes** — what was produced or solved
 - **Open questions** — what is still unresolved
 
-Saves to `projects/<name>/sessions/YYYY-MM-DD-<title>.md` and updates the index.
-If any decision seems significant, you are prompted to add it to `MEMORY.md` — you decide.
+Saves to `<project>/sessions/<project>-YYYY-MM-DD-<title>.md` and appends it to the project hub.
+If any decision seems significant, you are prompted to add it to the hub memory — you decide.
 
 The Stop hook reminds you once per day if you haven't saved yet.
 
@@ -126,8 +127,8 @@ Search the vault and load relevant notes into context.
 
 How it works:
 
-1. Reads the active project's `_index/INDEX.md` — cheap scan, discarded after scoring
-2. Also reads `_global/_index/INDEX.md` — project results ranked first
+1. Reads the active project hub index — cheap scan, discarded after scoring
+2. Also reads `global.md` — project results ranked first
 3. Scores entries against your query
 4. Loads top matches into context
 5. Shows names of linked notes without loading them
@@ -186,8 +187,8 @@ Initialize the root brain vault (first-time setup only).
 /add-vault --root ~/brain
 ```
 
-Creates the `brain/` folder, writes the `_global/` sub-structure, and registers `vaults.root`
-in `.claude/settings.json`. Run this once after installation.
+Creates the `brain/` folder, writes the `_global/` and `classes/` sub-structure, and registers
+`vaults.root` in `~/.claude/settings.json`. Run this once after installation.
 
 ---
 
@@ -196,12 +197,13 @@ in `.claude/settings.json`. Run this once after installation.
 Create a new project workspace inside the root vault.
 
 ```text
-/add-vault my-app
-/add-vault project-x
+/add-vault my-app --class client-products
+/add-vault project-x --class personal-tools
 ```
 
-Creates `brain/projects/<project-name>/` with the full internal structure and registers it
-in `vaults.aliases`. If no active project is set, the new one becomes active automatically.
+Creates the hub `brain/projects/<project-name>.md` with `class`, `domain`, `stage` and `engagement`,
+the content folders under `brain/projects/<project-name>/`, registers it in the class hub and
+`vaults.aliases`, and makes it active. Without `--class` Claude lists classes and asks.
 
 ---
 
@@ -222,11 +224,11 @@ After switching, run `/memory` to load the new project's context.
 
 ### `/index`
 
-Rebuild `_index/INDEX.md` from scratch by scanning all vault files.
+Rebuild the index sections of a hub (below its `---` divider) by scanning vault files.
 
 ```text
-/index          — rebuild index for active project
-/index global   — rebuild index for _global/
+/index          — rebuild the active project hub
+/index global   — rebuild global.md classes and _global/ entries
 ```
 
 Use this when:
@@ -253,10 +255,19 @@ What it does:
 1. Finds sessions older than 90 days
 2. Shows the list — asks for confirmation before proceeding
 3. Extracts recurring decisions, stable facts, repeated open questions
-4. Proposes changes to `MEMORY.md` — you approve before anything is written
+4. Proposes changes to the hub memory — you approve before anything is written
 5. Archives originals (replaces each with a 3–5 line summary)
 
-Run monthly, or when `MEMORY.md` is getting stale.
+Run monthly, or when the hub memory is getting stale.
+
+---
+
+### `/retro [7d | since YYYY-MM-DD | project <name>]`
+
+Retrospective over Claude Code sessions since the last run. Builds a compact digest
+(never raw transcripts), finds recurring patterns and proposes updates to Claude memory,
+Brain hubs, missing session notes, `CLAUDE.md` rules, skills, hooks and permissions.
+Nothing is applied without your approval; the report is saved under `_global/retro/`.
 
 ---
 
@@ -266,7 +277,7 @@ Run monthly, or when `MEMORY.md` is getting stale.
 
 ```bash
 /add-vault --root ~/brain
-/add-vault my-first-project
+/add-vault my-first-project --class personal-tools
 /memory
 ```
 
@@ -277,7 +288,7 @@ Open `~/brain` in Obsidian to browse everything visually.
 ### Starting a new project
 
 ```text
-/add-vault my-app
+/add-vault my-app --class client-products
 /memory
 ```
 
@@ -315,7 +326,7 @@ Read the output. If you need more context on a specific topic:
 ### Loading global memory alongside project memory
 
 ```text
-/memory global    ← loads _global/memory/MEMORY.md
+/memory global    ← loads global.md
 ```
 
 Recall always searches both project and global indexes automatically — no extra step needed.
@@ -326,15 +337,15 @@ Recall always searches both project and global indexes automatically — no extr
 
 ---
 
-### Keeping MEMORY.md lean
+### Keeping the hub lean
 
-`MEMORY.md` has a hard limit of 1 500 tokens. When it is getting full, run:
+The hub memory section has a budget of 1 500 tokens. When it is getting full, run:
 
 ```text
 /consolidate
 ```
 
-Or manually: open `memory/MEMORY.md` in Obsidian or any editor,
+Or manually: open the project hub in Obsidian or any editor,
 move detailed entries to `memory/context/<topic>.md`,
 and replace them with a pointer line:
 
@@ -356,8 +367,8 @@ preferred libraries, and architecture decisions live in global memory — availa
 ```text
 # First time
 /add-vault --root ~/brain
-/add-vault backend-api
-/add-vault mobile-app
+/add-vault backend-api --class client-products
+/add-vault mobile-app --class client-products
 ```
 
 Working on the API:
@@ -422,7 +433,7 @@ caching but not the details.
 /memory
 ```
 
-`MEMORY.md` shows the project state and an open question about cache invalidation.
+The project hub shows the project state and an open question about cache invalidation.
 You need more detail:
 
 ```text
@@ -452,7 +463,7 @@ already exists and gets linked from the session automatically.
 
 ### Use case 5: Monthly memory maintenance
 
-After a month, your project vault has 25 sessions. `MEMORY.md` is getting stale.
+After a month, your project vault has 25 sessions. The hub memory is getting stale.
 
 ```text
 /consolidate
@@ -476,7 +487,7 @@ Resulting size: ~980 tokens (limit: 1 500)
 ```
 
 You approve. The 12 sessions are archived to 3–5 line summaries.
-`MEMORY.md` now reflects patterns and decisions, not episode logs.
+The hub now reflects patterns and decisions, not episode logs.
 The Obsidian graph stays clean — archived notes are still there but compressed.
 
 ---
@@ -498,68 +509,6 @@ project-specific results, but always available.
 
 ---
 
-## Vault Layout
+## Vault Layout and settings
 
-```text
-brain/                        ← single Obsidian vault root
-├── _global/                  ← global memory
-│   ├── _index/
-│   │   └── INDEX.md          ← global table of contents, rebuilt by /index global
-│   ├── memory/
-│   │   ├── MEMORY.md         ← global core memory (≤ 1 500 tokens)
-│   │   └── context/          ← overflow detail blocks, loaded on demand
-│   ├── sessions/
-│   │   ├── *.md              ← sessions saved across projects
-│   │   └── archive/          ← consolidated sessions from /consolidate global
-│   ├── documents/
-│   │   ├── originals/        ← raw files and URLs
-│   │   └── processed/        ← summarized and linked notes
-│   └── notes/                ← quick notes relevant to all projects
-│
-└── projects/
-    ├── project-alpha/        ← project workspace (same internal structure as _global/)
-    │   ├── _index/
-    │   │   └── INDEX.md      ← project table of contents
-    │   ├── memory/
-    │   │   ├── MEMORY.md     ← project core memory (≤ 1 500 tokens)
-    │   │   └── context/
-    │   ├── sessions/
-    │   │   └── archive/
-    │   ├── documents/
-    │   │   ├── originals/
-    │   │   └── processed/
-    │   └── notes/
-    └── project-beta/
-        └── ...
-```
-
-Open `brain/` in Obsidian — that is all the Obsidian setup required.
-
----
-
-## settings.json Reference
-
-Located at `.claude/settings.json` in your project:
-
-```json
-{
-  "vaults": {
-    "root": "/absolute/path/to/brain",
-    "active": "/absolute/path/to/brain/projects/my-app",
-    "aliases": {
-      "global":    "/absolute/path/to/brain/_global",
-      "my-app":    "/absolute/path/to/brain/projects/my-app",
-      "project-x": "/absolute/path/to/brain/projects/project-x"
-    }
-  },
-  "hooks": {
-    "Stop": [
-      { "command": "bash .claude/scripts/check-originals.sh" },
-      { "command": "bash .claude/scripts/remind-save-session.sh" }
-    ]
-  }
-}
-```
-
-`root` is the single `brain/` folder — used by MCP and by commands that operate across all
-workspaces. All other paths are absolute. Use consistent paths across machines for portability.
+See [README.md](README.md#vault-structure) for the vault tree, hub format and `settings.json` reference.

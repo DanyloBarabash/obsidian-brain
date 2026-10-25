@@ -71,12 +71,12 @@ Project path: `{vaults.root}/projects/{project-name}`
 
 ### B3. Check if project already exists
 
-If `{project-path}` already exists, stop:
+If `{project-path}` or `{project-path}.md` already exists, stop:
 "Project '{project-name}' already exists at {project-path}."
 
 ### B4. Create hub file and content directories
 
-Create the hub file at `{vaults.active}.md`:
+Create the hub file at `{project-path}.md`:
 
 ```markdown
 ---

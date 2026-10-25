@@ -98,7 +98,7 @@ in the hub file memory section, tell the user:
   {decision}
 Edit {vaults.active}.md directly, or run /memory to review."
 
-Do not automatically edit MEMORY.md.
+Do not automatically edit the hub memory section.
 
 ### 8. Confirm
 

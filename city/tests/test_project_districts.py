@@ -6,13 +6,14 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from server import Vault
 from simulation import Simulation
 from simulation.clusters import audit_clusters
 from simulation.profile import VALUES, convex_overlap
-from simulation.world import TICKS, wedge_offset
+from simulation.world import TICKS, World, wedge_offset
 
 
 class ProjectDistrictTests(unittest.TestCase):
@@ -82,6 +83,54 @@ class ProjectDistrictTests(unittest.TestCase):
             self.assertEqual(model.audit(),[])
             state=deepcopy(model.state);self.assertEqual(Simulation(state).state,state)
 
+    def test_technology_complex_migrates_project_estates_without_moving_homes(self):
+        from simulation.migrations import migrate
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            for name in ("claude-brain","lab-track"):
+                self.hub(root,f"projects/{name}.md",name,"city_topic: technology\n")
+            sites={k:v for k,v in VALUES["landmark_sites"].items() if k!="technology"}
+            with patch.dict(VALUES,{"landmark_sites":sites}):
+                model=Simulation();model.sync(Vault(root,Path(directory)/"state").build());model.advance(100)
+            homes=deepcopy(model.state["buildings"])
+            model.state["layoutVersion"]=11
+            self.assertTrue(migrate(model.state))
+            model=Simulation(model.state)
+            park=model.world.state["services"]["facility:technology"]
+            self.assertEqual(park["siteVersion"],1)
+            self.assertEqual([park["footprint"]["fw"],park["footprint"]["fd"]],[105,85])
+            bays=[s for s in model.world.state["services"].values() if s.get("annexOf")==park["id"]]
+            self.assertEqual({b["project"] for b in bays},{"projects/claude-brain.md","projects/lab-track.md"})
+            for bay in bays:
+                self.assertIsNotNone(model.world.walk.route(park["entrance"],bay["entrance"]))
+            self.assertEqual(model.state["buildings"],homes)
+            self.assertEqual(model.audit(),[])
+            state=deepcopy(model.state)
+            self.assertEqual(Simulation(state).state,state)
+
+    def test_growth_fills_the_nearest_feasible_complex_band_before_cheaper_land(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/a.md","Технології","city_topic: technology\n")
+            model=Simulation();model.sync(Vault(root,Path(directory)/"state").build())
+            source=next(iter(model.state["sources"].values()))
+            source={**source,"sourceClass":"technology","district":"technology","stableId":source["id"]}
+            near=World(deepcopy(model.world.state),lambda *a,**kw:None)._new_block(source,0)
+            with patch.dict(VALUES,{"landmark_growth_band":1e9}):
+                cheap=World(deepcopy(model.world.state),lambda *a,**kw:None)._new_block(source,0)
+            self.assertNotEqual(near["cell"],cheap["cell"],"the complex changes the actual growth decision")
+            self.assertGreater(near["growth"]["score"],cheap["growth"]["score"],"nearby land wins even over a lower compactness score")
+            box=model.world.state["parcels"][model.world.state["services"]["facility:technology"]["parcel"]]["box"]
+            def distance(block):
+                b=block["envelope"]
+                return math.hypot(max(box["x"]-b["x"]-b["w"],0,b["x"]-box["x"]-box["w"]),max(box["y"]-b["y"]-b["h"],0,b["y"]-box["y"]-box["h"]))
+            self.assertLess(distance(near),distance(cheap))
+            homes=deepcopy(model.state["buildings"])
+            model.world._new_block(source,0)
+            self.assertEqual(model.state["buildings"],homes)
+            self.assertEqual(model.audit(),[])
+            self.assertTrue(audit_clusters(model)["passed"])
+
     def test_article_market_opens_on_the_civic_square(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)/"vault";root.mkdir()
@@ -95,6 +144,27 @@ class ProjectDistrictTests(unittest.TestCase):
             self.assertIsNotNone(world.walk.route(world.state["services"]["plaza:town-hall"]["entrance"],market["entrance"]))
             self.assertIn("plaza:market",model.activities._landmarks("anything"),"every quarter can visit the market")
             self.assertEqual(model.audit(),[])
+
+    def test_reference_data_documents_farm_fields(self):
+        from classification import reference_data
+        doc = "projects/team/sdk/assets/documents/sprint.md"
+        self.assertTrue(reference_data(doc, {"type":"document"}, "10m Sprint", 9), "a catalogue of parallel entries")
+        self.assertTrue(reference_data("projects/team/documents/a.md", {"tags":"[sprint, kpi]"}, "Sprint", 1), "KPI reference data")
+        self.assertTrue(reference_data("projects/team/documents/b.md", {}, "Payload — API Input Contract", 1), "a contract")
+        self.assertFalse(reference_data("projects/team/documents/current-state.md", {"tags":"[kpi]"}, "Current state", 9), "current state is not data")
+        self.assertFalse(reference_data("projects/team/documents/c.md", {}, "Architecture notes", 1), "an ordinary document")
+        self.assertFalse(reference_data("projects/team/documents/d.md", {"tags":"[reference]"}, "Rules", 1, "council"), "civic documents keep their role")
+        self.assertTrue(reference_data("projects/team/documents/c.md", {"city_field":"true"}, "Architecture notes", 1), "explicit opt-in")
+        self.assertFalse(reference_data(doc, {"city_field":"false"}, "10m Sprint", 9), "explicit opt-out")
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/team.md","Команда","city_topic: sports\n")
+            (root/"projects/team/documents").mkdir(parents=True)
+            (root/"projects/team/documents/flags.md").write_text("---\ntype: document\ntags: [flags, kpi]\n---\n# Flags\n")
+            (root/"projects/team/documents/overview.md").write_text("---\ntype: document\n---\n# Notes\n")
+            nodes={n["id"]:n for n in Vault(root,Path(directory)/"state").build()["nodes"]}
+            self.assertTrue(nodes["projects/team/documents/flags.md"]["cityField"])
+            self.assertFalse(nodes["projects/team/documents/overview.md"]["cityField"])
 
     def test_project_hub_can_opt_out_of_its_landmark(self):
         with tempfile.TemporaryDirectory() as directory:

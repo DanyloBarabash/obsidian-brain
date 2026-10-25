@@ -54,7 +54,7 @@ if [ -n "$VAULT_PATH" ]; then
   echo ""
   echo "Initializing vault ..."
 
-  VAULT_ABS="$(expand_path "$VAULT_PATH")"
+  VAULT_ABS="$(python3 -c 'import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))' "$VAULT_PATH")"
 
   if [ -d "$VAULT_ABS/_global" ]; then
     warn "Vault already initialized at $VAULT_ABS — skipping template copy"
@@ -77,8 +77,10 @@ with open(settings_path) as f:
     s = json.load(f)
 
 s.setdefault('vaults', {})
+if os.path.realpath(s['vaults'].get('root') or '.') != vault_abs:
+    s['vaults']['active'] = ''
 s['vaults']['root']   = vault_abs
-s['vaults']['active'] = ''
+s['vaults'].setdefault('active', '')
 s['vaults'].setdefault('aliases', {})
 s['vaults']['aliases']['global'] = vault_abs + '/_global'
 
@@ -129,7 +131,7 @@ install_claude() {
   done
 
   CLAUDE_DIR="$CLAUDE_DIR" python3 - <<'PYEOF'
-import json, os
+import json, os, shlex
 
 claude_dir    = os.environ['CLAUDE_DIR']
 settings_path = os.path.join(claude_dir, 'settings.json')
@@ -140,8 +142,8 @@ if os.path.exists(settings_path):
         existing = json.load(f)
 
 new_commands = [
-    f"bash {claude_dir}/scripts/check-originals.sh",
-    f"bash {claude_dir}/scripts/remind-save-session.sh",
+    f"bash {shlex.quote(claude_dir + '/scripts/check-originals.sh')}",
+    f"bash {shlex.quote(claude_dir + '/scripts/remind-save-session.sh')}",
 ]
 
 existing.setdefault('hooks', {})
@@ -158,6 +160,10 @@ if brain_block is None:
     brain_block = {'matcher': '', 'hooks': []}
     existing['hooks']['Stop'].append(brain_block)
 
+for hook in brain_block['hooks']:
+    for script in ('check-originals.sh', 'remind-save-session.sh'):
+        if hook.get('command') == f"bash {claude_dir}/scripts/{script}":
+            hook['command'] = f"bash {shlex.quote(claude_dir + '/scripts/' + script)}"
 existing_cmds = {h['command'] for h in brain_block['hooks'] if 'command' in h}
 added = 0
 for cmd in new_commands:
@@ -180,6 +186,8 @@ marker = '# Claude Brain'
 
 section = '''
 # Claude Brain
+
+- Create reports, separate artifacts, exports, presentations, visualizations, and session summaries only when the user explicitly asks. Do not create or open extra deliverables automatically after a task; give a brief result in chat. This does not prevent changes to the requested product or necessary updates to existing canonical rules and project knowledge.
 
 Persistent memory system installed globally. Commands available in every Claude Code session:
 
@@ -232,16 +240,42 @@ if [ "$CODEX" = true ] && [ -d "$CODEX_DIR" ]; then
       dest="$CODEX_DIR/skills/$name"
       mkdir -p "$dest"
       cp -R "$d". "$dest/"
-      find "$dest" -type f -name '*.md' -exec sed -i.bak "s|{{VAULT_ROOT}}|$VAULT_ROOT|g" {} +
-      find "$dest" -type f -name '*.bak' -delete
+      python3 - "$dest" "$VAULT_ROOT" <<'PYEOF'
+from pathlib import Path
+import sys
+
+for path in Path(sys.argv[1]).rglob('*.md'):
+    path.write_text(path.read_text().replace('{{VAULT_ROOT}}', sys.argv[2]))
+PYEOF
       success "skill $name"
     done
 
     AGENTS_MD="$CODEX_DIR/AGENTS.md"
     if [ -f "$AGENTS_MD" ] && grep -q '^## Obsidian Brain' "$AGENTS_MD"; then
-      warn "Obsidian Brain section already in AGENTS.md — skipping"
+      python3 - "$AGENTS_MD" "$VAULT_ROOT" <<'PYEOF'
+from pathlib import Path
+import re, sys
+
+path = Path(sys.argv[1])
+content = path.read_text()
+content = re.sub(
+    r'(^## Obsidian Brain\s*\n)(.*?)(?=^#{1,2} |\Z)',
+    lambda section: section[1] + re.sub(
+        r'^- The shared knowledge vault is `[^`]*`\.$',
+        lambda _: '- The shared knowledge vault is `' + sys.argv[2] + '`.',
+        section[2], flags=re.M),
+    content, flags=re.M | re.S)
+path.write_text(content)
+PYEOF
+      success "Obsidian Brain vault path updated in AGENTS.md"
     else
-      { echo ""; sed "s|{{VAULT_ROOT}}|$VAULT_ROOT|g" "$SCRIPT_DIR/codex/AGENTS.md"; } >> "$AGENTS_MD"
+      python3 - "$SCRIPT_DIR/codex/AGENTS.md" "$AGENTS_MD" "$VAULT_ROOT" <<'PYEOF'
+from pathlib import Path
+import sys
+
+with open(sys.argv[2], 'a') as target:
+    target.write('\n' + Path(sys.argv[1]).read_text().replace('{{VAULT_ROOT}}', sys.argv[3]))
+PYEOF
       success "Obsidian Brain section appended to AGENTS.md"
     fi
   fi

@@ -5,16 +5,19 @@
   <title>Brain City — місто твоїх знань</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/preparation.css">
+  <link rel="stylesheet" href="/document-reader.css">
+  <script src="/vendor/marked.min.js" defer></script>
+  <script src="/vendor/purify.min.js" defer></script>
+  <script src="/document-reader.js" defer></script>
   <script src="/city-plan.js" defer></script>
-  <script src="/details.js" defer></script>
   <script src="/city-mesh.js" defer></script>
   <script src="/app.js" defer></script>
-  <script type="module" src="/scene3d.js"></script>
+  <script id="city-renderer" type="module" src="/scene3d.js"></script>
   <script src="/preparation.js" defer></script>
   <script src="/market.js" defer></script>
 </head>
 <body>
-  <canvas id="city" aria-label="Інтерактивне ізометричне місто нотаток. Для навігації клавіатурою скористайся пошуком і списком будівель."></canvas>
+  <canvas id="city" aria-label="Інтерактивне тривимірне місто нотаток. Для навігації клавіатурою скористайся пошуком і списком будівель."></canvas>
   <div class="vignette"></div>
   <header>
     <a class="brand" href="/" aria-label="Brain City, головна"><span class="brand-icon">◈</span><span>BRAIN<span class="brand-light">CITY</span><small>ЖИВИЙ АТЛАС ТВОЇХ ЗНАНЬ</small></span></a>
@@ -22,7 +25,7 @@
     <button id="show-preparation" class="pill" aria-expanded="false" aria-controls="preparation">✧ Нове місто</button>
     <button id="day" class="pill" title="Перемкнути день / ніч">◐ <span>Нічне місто</span></button>
   </header>
-  <aside class="left-panel glass">
+  <aside id="left-panel" class="left-panel glass">
     <div class="eyebrow">ТВОЯ ПАМ’ЯТЬ, ЩО ЖИВЕ</div>
     <h1>Думки стають<br><em>місцями.</em></h1>
     <p class="intro">Кожна нотатка має адресу.<br>Сесії живуть у спільних будинках.</p>
@@ -42,9 +45,16 @@
     <div id="note-history" class="history-caption"></div>
     <section id="apartment-panel" hidden><div class="section-title" id="units-title">СЕСІЇ ЦЬОГО БУДИНКУ</div><div id="apartment-units"></div></section>
     <a id="library-source" class="text-button" hidden target="_blank" rel="noopener noreferrer">Відкрити першоджерело ↗</a>
-    <a id="open-obsidian" class="primary" href="#">Відкрити в Obsidian <span>↗</span></a>
+    <button id="read-document" class="primary">Читати документ <span>↗</span></button>
+    <a id="open-obsidian" class="text-button" href="#">В Obsidian ↗</a>
     <div class="tabs"><button id="tab-content" class="active">Нотатка</button><button id="tab-links">Зв’язки <span id="link-count"></span></button></div>
-    <pre id="note-content"></pre><div id="note-links" hidden></div>
+    <div id="note-content" class="document-prose"></div><div id="note-links" hidden></div>
+  </aside>
+  <aside id="district-panel" class="glass" hidden aria-label="Район міста">
+    <div class="inspector-top"><span class="eyebrow">РАЙОН МІСТА</span><button id="close-district" class="icon-button" aria-label="Закрити район">×</button></div>
+    <h2 id="district-title"></h2><div id="district-caption" class="history-caption"></div>
+    <div id="district-facts" class="district-facts"></div>
+    <div id="district-sections"></div>
   </aside>
   <aside id="city-history" class="glass" hidden aria-label="Історія міста">
     <div class="inspector-top"><span class="eyebrow">ПАМ’ЯТЬ МІСТА</span><button id="close-history" class="icon-button" aria-label="Закрити історію">×</button></div>
@@ -71,8 +81,26 @@
     <div class="section-title">ПЕРЕВІРКА МАСШТАБУ</div><div id="preparation-scale"></div>
     <p class="preparation-next">Наступний етап — перебудова карти за новою моделлю. Поточне місто залишається на місці.</p>
   </aside>
-  <div class="bottom-bar glass"><div class="view-label"><span class="live-dot"></span><span id="view-label">Огляд міста</span></div><div class="controls"><button id="toggle-history" aria-pressed="false" title="Історія міста">◷ <span>Історія</span></button><button id="toggle-links" aria-pressed="false" title="Показати всі зв’язки">⌁ <span>Зв’язки</span></button><button id="pause" aria-pressed="false" title="Призупинити рух">Ⅱ</button><span class="divider"></span><button id="zoom-out" aria-label="Віддалити">−</button><span id="zoom-label">100%</span><button id="zoom-in" aria-label="Наблизити">+</button><button id="toggle-3d" aria-pressed="false" title="Тривимірне місто: вільний поворот і нахил" hidden>3D</button><button id="rotate-left" title="Повернути карту ліворуч (Q)" aria-label="Повернути карту ліворуч">⟲</button><button id="rotate-right" title="Повернути карту праворуч (E)" aria-label="Повернути карту праворуч">⟳</button><button id="fit" title="Показати все місто" aria-label="Показати все місто">⌖</button></div></div>
+  <div class="bottom-bar glass"><div class="view-label"><span class="live-dot"></span><span id="view-label">Огляд міста</span></div><div class="controls"><button id="toggle-panel" aria-pressed="true" aria-controls="left-panel" title="Сховати або показати панель (H)">☰ <span>Панель</span></button><span class="divider"></span><button id="toggle-history" aria-pressed="false" title="Історія міста">◷ <span>Історія</span></button><button id="toggle-links" aria-pressed="false" title="Показати всі зв’язки">⌁ <span>Зв’язки</span></button><button id="pause" aria-pressed="false" title="Призупинити рух">Ⅱ</button><span class="divider"></span><button id="zoom-out" aria-label="Віддалити">−</button><span id="zoom-label">100%</span><button id="zoom-in" aria-label="Наблизити">+</button><button id="rotate-left" title="Повернути карту ліворуч (Q)" aria-label="Повернути карту ліворуч">⟲</button><button id="rotate-right" title="Повернути карту праворуч (E)" aria-label="Повернути карту праворуч">⟳</button><button id="fit" title="Показати все місто" aria-label="Показати все місто">⌖</button></div></div>
   <div class="map-hint">Перетягуй, щоб мандрувати <i>·</i> Прокручуй, щоб наблизити <i>·</i> Q / E або права кнопка / Shift + перетягування — повернути й нахилити <i>·</i> Обери будинок або мешканця</div>
+  <div id="render-error" class="glass" role="alert" hidden>Не вдалося відкрити 3D-місто. Перезапусти застосунок або відкрий місто в браузері з підтримкою WebGL 2.</div>
+  <dialog id="document-reader" aria-labelledby="reader-title">
+    <div class="reader-toolbar">
+      <span class="reader-brand">◈ <span>ЧИТАЛЬНЯ <small>BRAIN CITY</small></span></span>
+      <div class="reader-actions"><button id="reader-back" aria-label="Попередній документ" disabled>←</button><button id="reader-source" aria-pressed="false">Markdown</button><button id="reader-close" aria-label="Закрити читальню">×</button></div>
+    </div>
+    <div class="reader-progress" aria-hidden="true"><div id="reader-progress-bar"></div></div>
+    <div class="reader-layout">
+      <nav id="reader-outline" aria-label="Зміст документа"><div class="eyebrow">НА ЦІЙ СТОРІНЦІ</div><div id="reader-toc"></div><div class="reader-flourish">✧<small>Місце для довгих думок.</small></div></nav>
+      <div id="reader-scroll" tabindex="0">
+        <div class="reader-paper"><div class="reader-kicker" id="reader-kicker"></div><h1 id="reader-title"></h1><div id="reader-meta"></div>
+          <div id="reader-status" role="status"></div><article id="reader-body" class="document-prose"></article><pre id="reader-raw" hidden></pre>
+          <footer class="reader-end">◈<span>Ти дійшов до краю цієї думки.</span></footer>
+        </div>
+      </div>
+    </div>
+    <div id="reader-lightbox" hidden><button id="reader-image-close" aria-label="Закрити ілюстрацію">×</button><div id="reader-image"></div><div class="reader-image-hint">Натисни поза ілюстрацією або Escape, щоб повернутися</div></div>
+  </dialog>
   <div id="toast" hidden role="status"></div>
 </body>
 </html>

@@ -27,9 +27,11 @@ Top-level and subproject hubs are files beside their same-named content folders.
 - `class`: stable group of projects with a scope and an explicit classification rule.
 - `hub`: compact current context, state, durable decisions, open questions, and links.
 - `document`: maintained technical or domain reference that may be updated over time.
+- `article`: a library publication summary with a source URL when available, an independent subject `domain`, and no project owner.
 - `note`: focused durable knowledge about one topic.
 - `session`: concise history of completed work and verified outcomes.
 - `_global`: cross-project protocols or knowledge only.
+- Project-free articles and references: `_global/library.md` → `_global/library/articles/`, `documents/`, or `notes/`. Set `knowledge_scope: library`, `domain` for the subject, a stable `id`, and `source_url` when applicable. Link `related` to `[[_global/library]]` and add a downward hub link. Omit project ownership; optional `applies_to` links express reuse by projects. Do not move project documents, sessions or global rules into the library.
 
 ## Frontmatter
 

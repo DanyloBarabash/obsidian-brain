@@ -62,7 +62,7 @@ For global: read `{vaults.root}/global.md`.
 For project: read `{vaults.active}.md`.
 Count approximate tokens: characters ÷ 4.
 
-### 6. Propose MEMORY.md updates
+### 6. Propose hub memory updates
 
 Show the user a proposal:
 
@@ -110,5 +110,5 @@ d. Update the hub file entry: prefix with `[archived]`, replace summary.
 ### 9. Confirm
 
 "Consolidated {N} sessions in {label}.
-MEMORY.md: {N} patterns added, {N} entries moved to context/.
+Hub: {N} patterns added, {N} entries moved to context/.
 Archived: {slugs}"

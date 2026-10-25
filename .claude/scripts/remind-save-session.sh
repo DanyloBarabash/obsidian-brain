@@ -22,7 +22,7 @@ SESSIONS_DIR="$VAULT/sessions"
 [ -d "$SESSIONS_DIR" ] || exit 0
 
 TODAY=$(date +%Y-%m-%d)
-ls "$SESSIONS_DIR"/${TODAY}-*.md 2>/dev/null | grep -q . && exit 0
+ls "$SESSIONS_DIR"/"$(basename "$VAULT")"-${TODAY}-*.md "$SESSIONS_DIR"/${TODAY}-*.md 2>/dev/null | grep -q . && exit 0
 
 SESSION_COUNT=$(find "$SESSIONS_DIR" -maxdepth 1 -name "*.md" | wc -l | tr -d ' ')
 [ "$SESSION_COUNT" -eq 0 ] && exit 0

@@ -74,7 +74,15 @@ def pedestrian_junctions(state, walk=None):
         agent.update(route={**route,'nodes':chain,'edges':keys},edge=index,progress=distance,node=chain[index])
 
 
-MIGRATIONS = {8:open_river_valley, 9:landmark_complexes, 10:pedestrian_junctions}
+def technology_complex(state):
+    """Retry the technology estate on sync; preserve all source homes and the existing world."""
+    service = state['world']['services'].get('facility:technology')
+    if service:
+        service.pop('estateAttemptedSources', None)
+        service['title'] = 'Технопарк і центр винахідництва'
+
+
+MIGRATIONS = {8:open_river_valley, 9:landmark_complexes, 10:pedestrian_junctions, 11:technology_complex}
 
 
 def migrate(state):

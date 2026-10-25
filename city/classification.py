@@ -74,6 +74,25 @@ def project_profile(path, note, parents, previous=None, established=False):
             "topicTitle": meta.get("city_topic_title") or TOPICS.get(topic, (topic.replace("-", " ").title(),))[0]}
 
 
+# Reference data of a project also farms a field outside the city (LANDSCAPE.md, LS-11). These are our editorial
+# signals, not a standard: a catalogue of parallel entries, or KPI / dataset / contract / reference documents.
+REFERENCE_TAGS = {"kpi", "dataset", "reference", "flags", "contract", "config", "procedure", "specification"}
+REFERENCE_WORDS = ("reference", "contract", "routes", "specification", "довідник")
+FIELD_CATALOGUE = 8
+
+
+def reference_data(path, meta, title, siblings, role="library"):
+    """Whether a project document is reference data; `city_field: true/false` overrides the editorial rule."""
+    explicit = str(meta.get("city_field", "")).lower()
+    if explicit in ("true", "false"):
+        return explicit == "true"
+    name = PurePosixPath(path).stem
+    if role != "library" or not path.startswith("projects/") or "/documents/" not in path or name.endswith(("current-state", "project-overview")):
+        return False
+    tags = set(re.findall(r"[\w-]+", str(meta.get("tags", "")).casefold()))
+    return siblings >= FIELD_CATALOGUE or bool(tags & REFERENCE_TAGS) or any(word in title.casefold() for word in REFERENCE_WORDS)
+
+
 def classify(path, meta, owner, source_class, topic="", thematic=False):
     """Return independent facets without moving or duplicating a source note."""
     name = PurePosixPath(path).stem

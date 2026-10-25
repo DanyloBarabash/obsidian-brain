@@ -16,7 +16,7 @@ from . import housing
 from .facilities import sync_facilities
 
 
-LAYOUT_VERSION = 11
+LAYOUT_VERSION = 12
 # Per-tick movement is visible in live agent state; it is not persisted as history.
 TRANSIENT_EVENTS = frozenset({"tripStarted", "tripArrived", "transitDeparted", "transitArrived"})
 # Saved parts grouped by change rate; an unchanged part keeps its content-addressed file.

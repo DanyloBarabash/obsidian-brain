@@ -32,7 +32,7 @@ async function renderMarket(){
   $('market-stalls').replaceChildren(...stalls);
   clearTimeout(renderMarket.timer);if(data.describing||data.refreshing)renderMarket.timer=setTimeout(()=>marketOpen&&renderMarket(),MARKET_DESCRIBE_POLL_MS);}
 function stallCount(data){return data.stalls.reduce((sum,stall)=>sum+stall.items.length,0);}
-function openMarket(){closeNote();closeHistory();marketOpen=true;$('market').hidden=false;renderMarket();}
+function openMarket(){closeNote();closeHistory();if(typeof focusMarket==='function')focusMarket();marketOpen=true;$('market').hidden=false;renderMarket();}
 function closeMarket(){marketOpen=false;$('market').hidden=true;}
 $('open-market').onclick=openMarket;$('close-market').onclick=closeMarket;
 $('market-link').onsubmit=async(event)=>{event.preventDefault();const input=$('market-url');toast('Несемо посилання в мозок…');

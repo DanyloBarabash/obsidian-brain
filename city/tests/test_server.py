@@ -123,6 +123,14 @@ class CityTests(unittest.TestCase):
                 with self.assertRaises(HTTPError) as error:
                     urlopen(base + route)
                 self.assertEqual(error.exception.code, 400)
+            self.write("projects/lab/notes/figure.svg",'<svg xmlns="http://www.w3.org/2000/svg"/>')
+            with urlopen(base+"/api/asset?path=figure.svg&note=projects/lab/notes/alpha.md") as response:
+                self.assertEqual(response.headers["Content-Type"],"image/svg+xml")
+                self.assertIn(b"<svg",response.read())
+            for route in ("/document-reader.js","/document-reader.css","/vendor/marked.min.js","/vendor/purify.min.js","/vendor/mermaid.min.js"):
+                with urlopen(base+route) as response:
+                    self.assertEqual(response.status,200)
+                    self.assertTrue(response.read())
             with self.assertRaises(HTTPError) as error:
                 urlopen(Request(base + "/api/city", headers={"Origin": "https://foreign.example"}))
             self.assertEqual(error.exception.code, 403)
@@ -133,6 +141,21 @@ class CityTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+    def test_illustrations_resolve_relative_unique_names_and_reject_unsafe_paths(self):
+        svg='<svg xmlns="http://www.w3.org/2000/svg"/>'
+        self.write("attachments/plot.svg",svg)
+        self.assertEqual(self.vault.read_asset("../attachments/plot.svg","projects/lab.md"),(svg.encode(),"image/svg+xml"))
+        self.assertEqual(self.vault.read_asset("plot.svg","projects/lab/notes/alpha.md"),(svg.encode(),"image/svg+xml"))
+        self.write("other/plot.svg",svg)
+        with self.assertRaises(FileNotFoundError):
+            self.vault.read_asset("plot.svg","projects/lab/notes/alpha.md")
+        outside=Path(self.temp.name)/"outside.png";outside.write_bytes(b"private")
+        (self.root/"escape.png").symlink_to(outside)
+        self.write(".obsidian/private.png","private")
+        for path in ("../outside.png","escape.png",".obsidian/private.png","projects/lab.md","https://example.org/a.png"):
+            with self.assertRaises(ValueError):
+                self.vault.read_asset(path)
 
 
 if __name__ == "__main__":

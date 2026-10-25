@@ -79,6 +79,7 @@ RULES = [
     (69,"Спільні будинки й адресні квартири",["test_housing.HousingTests.test_sessions_share_real_parcels_and_keep_individual_addresses"]),
     (70,"Теми незалежно від власника",["test_housing.HousingTests.test_topics_inherit_but_project_ownership_is_retained"]),
     (71,"Важливість і тематичні служби",["test_housing.HousingTests.test_thematic_facilities_have_land_access_and_real_visits"]),
+    (72,"Проєктні прибудови й ріст навколо комплексу",["test_project_districts.ProjectDistrictTests.test_project_building_is_a_bay_of_its_cluster_complex","test_project_districts.ProjectDistrictTests.test_technology_complex_migrates_project_estates_without_moving_homes","test_project_districts.ProjectDistrictTests.test_growth_fills_the_nearest_feasible_complex_band_before_cheaper_land"]),
 ]
 
 

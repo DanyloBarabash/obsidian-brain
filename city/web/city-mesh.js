@@ -8,7 +8,7 @@
   const FADE={day:'#9aa39a',night:'#47524a',keep:.3};
   const JOINT_SIDES=8,ROUND_SIDES=12,STICK=.8;
   const GABLED=new Set(['cottage','timber-house','townhouse','merchant-house','clock-house','atelier','maker-house','greenhouse']);
-  const SIGNATURE_SERVICES=new Set(['stadium','campus','solar-centre','swimming-pool','football-centre','velodrome','medical-centre','concert-hall']);
+  const SIGNATURE_SERVICES=new Set(['stadium','campus','innovation-centre','solar-centre','swimming-pool','football-centre','velodrome','medical-centre','concert-hall']);
 
   const toLinear=c=>{c/=255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;};
   const parsed=new Map();
@@ -31,6 +31,8 @@
       this.p.push(ax,ay,az,bx,by,bz,cx,cy,cz);for(let i=0;i<3;i++){this.n.push(nx,ny,nz);this.c.push(rgb[0],rgb[1],rgb[2]);}
     }
     quad(a,b,c,d,rgb){this.tri(a,b,c,rgb);this.tri(a,c,d,rgb);}
+    // Flat-normal quad with one colour per corner, for smooth ground gradients.
+    shaded(a,b,c,d,ca,cb,cc,cd){for(const [p,q,r,cp,cq,cr] of [[a,b,c,ca,cb,cc],[a,c,d,ca,cc,cd]]){const n=this.p.length;this.tri(p,q,r,cp);if(this.p.length===n)continue;this.c.splice(-9,9,...cp,...cq,...cr);}}
     arrays(){return {positions:new Float32Array(this.p),normals:new Float32Array(this.n),colors:new Float32Array(this.c)};}
   }
   // A frame rotates a model about its centre, the same rule the 2D renderer applies to street-aligned buildings.
@@ -261,6 +263,18 @@
       for(const s of [0,H-10]){sheet(24,s,117,9,22,P.col(day?'#e1e3d9':'#a3b6ae'));for(let u=28;u<140;u+=16)P.line([pt(u,s+4,22),pt(u,s+4,28),pt(u+7,s+4,22)],P.col('#8c9d98'),unit);}
       for(const u of [15,150])for(const v of [15,H-15]){P.stick(pt(u,v,3),pt(u,v,39),P.col('#8b9d96'),unit*1.4);sheet(u-4,v-2,8,4,39,P.col(day?'#e9e4cc':'#ffe7af'),!day);}
       sheet(74,H-5,17,4,8,P.col('#697d81'));
+    }else if(fn==='innovation-centre'){
+      const wall=P.col(day?'#c1b4d4':'#898ba7'),roof=P.col(day?'#586f85':'#394d6a'),glass=P.col(day?'#7ba9b6':'#415f86');
+      P.quad(0,0,w,d,.1,P.col(day?'#b4bcaa':'#53695f'));
+      for(const [u,v,ww,dd,h] of [[.06,.08,.28,.68,30],[.36,.08,.58,.22,24],[.66,.38,.28,.38,20]]){
+        P.box(w*u,d*v,w*ww,d*dd,h,wall,roof);P.windows(w*u,d*v,w*ww,d*dd,0,h,win,8);
+      }
+      P.box(w*.35,d*.12,w*.03,d*.12,15,glass,roof,7);
+      P.quad(w*.36,d*.37,w*.25,d*.43,.3,P.col(day?'#91a78a':'#405f50'));
+      P.quad(w*.43,d*.8,w*.14,d*.2,.5,stone);
+      P.cylinder(w*.48,d*.57,5,0,2,stone);P.pole(w*.48,d*.57,2,13,P.col('#8b9ca6'),1.2);
+      for(let k=0;k<3;k++){const a=k*Math.PI*2/3;P.stick([w*.48,d*.57,14],[w*.48+Math.cos(a)*7,d*.57+Math.sin(a)*7,20],glass,1.5);}
+      for(let k=0;k<4;k++)P.box(w*(.4+k*.12),d*.12,w*.08,d*.12,1,P.col('#365e7d'),undefined,25);
     }else if(fn==='campus'){
       const sx=w/115,sy=d/95,roof=P.col(day?'#64797b':'#405e63'),wall=P.col(day?'#ccb899':'#9ba99b');
       P.quad(0,0,w,d,.1,P.col(day?'#b2c095':'#566f52'));P.quad(w*.24,d*.3,w*.5,d*.45,.3,P.col(day?'#83a56f':'#416347'));
@@ -376,7 +390,7 @@
   }
   function ground(B,plan,day,triangulate){
     const t=plan.terrain,c=(a,b)=>colour(day?a:b);
-    polygon(B,t.outline,Z.terrain,c('#a7b88b','#3e5943'),triangulate);
+    // No separate city ground: the landscape's ground grid runs under the city too, so there is no edge to see.
     for(const r of plan.rivers||[]){if(r.shoreOutline)polygon(B,r.shoreOutline,Z.shore,c('#b9bf91','#53674f'),triangulate);}
     for(const r of plan.rivers||[]){if(r.waterOutline)polygon(B,r.waterOutline,Z.water,c('#75a9b0','#315968'),triangulate);else ribbon(B,r.points,r.width,Z.water,c('#6b9fa9','#2d505e'));
       if(r.deep)ribbon(B,r.deep,r.width*.4,Z.water+.1,c('#6399a5','#294c5e'));}
@@ -399,12 +413,22 @@
     bridges(B,plan,day);
   }
   // Landscape beyond the city (LANDSCAPE.md): land-use rings from the city outwards, noise-shaped forest edges with
-  // fringe, shrub belt and mantle, clustered trees with gaps, riparian belts, a tributary network, fields with hedgerows,
+  // fringe, shrub belt and mantle, clustered trees with gaps, riparian belts, a tributary network, fields of project reference data with shelterbelts,
   // mountains where the river rises and a sea where it ends. Scenario scenery only: deterministic, never simulated.
-  const LAND={ground:100000,upstream:2200,downstream:900,meander:.12,coastWave:60,beach:70,band:3800,cell:30,clear:45,
-    meadow:140,fieldsEnd:700,noise:1.1,edge:{fringe:.04,shrub:.09,mantle:.2},step:26,thinFrom:900,thin:.012,gapScales:[90,260],gap:.74,
+  const LAND={ground:100000,upstream:2200,downstream:900,seaMargin:60,coastRivers:[-6000,-4700,-3500,-2300,-1300,1300,2300,3500,4700],coastRiverGap:600,coastRiverWidth:1.1,coastRiverLength:[1500,1300],rim:[.62,.9],rimNoise:1400,seaLift:.3,bayReach:9000,coastStep:60,mouthCalm:500,bayScale:1800,bayDepth:900,wetSand:16,surf:[8,14],duneStep:9,duneDepth:70,duneGap:.55,duneReach:3500,meander:.12,coastWave:60,beach:110,band:3800,cell:30,clear:45,
+    meadow:140,fieldsEnd:700,noise:2.3,detail:.4,valley:.45,valleyReach:650,edge:{fringe:.04,shrub:.09,mantle:.2},step:26,thinFrom:900,thin:.012,gapScales:[90,260],gap:.74,
     riparian:30,junction:72*Math.PI/180,junctionJitter:10*Math.PI/180,meanderWaves:11,orders:[[2,4,.45,1300],[1,3,.25,520]],
-    field:{min:140,max:300},hedge:.4,hedgeStep:14,ground:60,mountains:46,mountainNear:500,mountainFar:2600,mountainSpread:1.05,valley:.16};
+    groundCell:60,mountains:46,mountainNear:500,mountainFar:2600,mountainSpread:1.05,valley:.16};
+  // Fields of project reference data (LANDSCAPE.md, LS-11): size from words, a road and shelterbelts per project.
+  const FARM={crops:['#d8c27a','#9bbd6a','#b9cf86','#a88a62','#a7c08a','#d9d36a','#c4b07a'],side:[130,300],perWord:2.2,gap:16,road:9,beltStep:11,beltSize:[8,4],push:[0,120,260,420,620],lift:.6,linkTries:60,roadStep:8,ramp:10,bridgeCost:6,builtCost:1.5,
+    layer:.35,roadLift:1,margin:5,barn:[24,16,10],
+    kinds:[{base:'#d8c27a',row:'#c4a95c',spacing:6,width:2.4,tramline:'#e6d49a'},{base:'#8fb062',row:'#6f9a4e',spacing:7,width:3},
+      {base:'#a88a62',row:'#8a6d48',spacing:4.5,width:2},{base:'#a7c08a',row:'#98b37c',spacing:9,width:4,bales:7},
+      {base:'#d9d36a',row:'#c9c35a',spacing:6,width:2.4,tramline:'#e3df90'},{base:'#7f9a4a',row:'#6b8a3c',spacing:7,width:2.6,heads:'#e8c547'},
+      {base:'#9bb36a',row:'#8aa35c',spacing:14,width:5,orchard:true}]};
+  // Fields lie just above the city's own ground, which covers the land near town; water and blocks stay above them.
+  // Landscape layers sit whole units apart: far views of a large scene leave little depth precision for thin gaps.
+  const LAYER={plane:6,grid:4,field:2,beach:1};
   function random(seed){let a=hash32(seed);return ()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};}
   function hash32(str){let h=2166136261;for(const c of str){h^=c.codePointAt(0);h=Math.imul(h,16777619);}return h>>>0;}
   function inside(p,poly){let hit=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)hit=!hit;}return hit;}
@@ -427,20 +451,23 @@
     for(let i=1;i<line.length;i++){const a=line[i-1],b=line[i],dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy)||1;
       for(const [w,z,col] of [[a.w/2+Math.max(3,a.w*.35),Z.shore,shoreCol],[a.w/2,Z.water,waterCol]]){const nx=-dy/l*w,ny=dx/l*w;B.quad([a.x+nx,a.y+ny,z],[b.x+nx,b.y+ny,z],[b.x-nx,b.y-ny,z],[a.x-nx,a.y-ny,z],col);disc(B,b.x,b.y,w,z,col);}}
   }
-  function landscape(B,plan,day,triangulate,trees){
+  function landscape(B,plan,day,triangulate,trees,fields,near,life){
     const t=plan.terrain,c=(a,b)=>colour(day?a:b),centre={x:(t.minX+t.maxX)/2,y:(t.minY+t.maxY)/2},reach=Math.hypot(t.maxX-t.minX,t.maxY-t.minY)/2,G=LAND.ground;
     const meadow=c('#a7b88b','#3e5943'),fringe=c('#b7c48c','#435c44'),floor=c('#7f9668','#2c4232');
-    B.quad([centre.x-G,centre.y-G,Z.terrain-.4],[centre.x+G,centre.y-G,Z.terrain-.4],[centre.x+G,centre.y+G,Z.terrain-.4],[centre.x-G,centre.y+G,Z.terrain-.4],floor);
+    B.quad([centre.x-G,centre.y-G,Z.terrain-LAYER.plane],[centre.x+G,centre.y-G,Z.terrain-LAYER.plane],[centre.x+G,centre.y+G,Z.terrain-LAYER.plane],[centre.x-G,centre.y+G,Z.terrain-LAYER.plane],floor);
     const rand=random('brain-city-landscape'),water=c('#75a9b0','#315968'),shore=c('#b9bf91','#53674f'),rivers=plan.rivers||[];
     // Grid over the landscape band: built cells, distance to the city, water and riparian cells.
+    // The camera may show land only within the full landscape, before the rim starts to fade (scene3d confines it).
+    life.view=(reach+LAND.band)*LAND.rim[0];
     const C=LAND.cell,half=reach+LAND.band,x0=centre.x-half,y0=centre.y-half,n=Math.ceil(2*half/C),cellOf=p=>{const i=Math.floor((p.x-x0)/C),j=Math.floor((p.y-y0)/C);return i<0||j<0||i>=n||j>=n?-1:i+j*n;};
-    const built=new Uint8Array(n*n),wet=new Uint8Array(n*n),riparian=new Uint8Array(n*n);
+    const built=new Uint8Array(n*n),wet=new Uint8Array(n*n),riparian=new Uint8Array(n*n),solid=new Uint8Array(n*n);
     const stamp=(grid,x,y,r)=>{const i0=Math.max(0,Math.floor((x-r-x0)/C)),i1=Math.min(n-1,Math.floor((x+r-x0)/C)),j0=Math.max(0,Math.floor((y-r-y0)/C)),j1=Math.min(n-1,Math.floor((y+r-y0)/C));for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)grid[i+j*n]=1;};
     const along=(grid,points,r)=>{for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<=l;s+=C/2)stamp(grid,a.x+(b.x-a.x)*s/(l||1),a.y+(b.y-a.y)*s/(l||1),typeof r==='function'?r(a):r);}};
     for(const r of [...plan.roads,...(plan.paths||[])])along(built,r.points,r.width/2+LAND.clear);
-    for(const d of plan.districts)for(const b of d.blocks){if(b.pad){const xs=b.pad.map(p=>p.x),ys=b.pad.map(p=>p.y);for(let x=Math.min(...xs);x<=Math.max(...xs);x+=C)for(let y=Math.min(...ys);y<=Math.max(...ys);y+=C)if(inside({x,y},b.pad))stamp(built,x,y,LAND.clear);}else stamp(built,b.x,b.y,(b.size||0)/2+LAND.clear);}
-    for(const nd of plan.nodes)stamp(built,nd.rcx??nd.x+nd.w/2,nd.rcy??nd.y+nd.d/2,Math.hypot(nd.w,nd.d)/2+LAND.clear);
-    for(const o of plan.scenery)if(o.kind==='service')stamp(built,o.rcx??o.x+o.w/2,o.rcy??o.y+o.d/2,Math.hypot(o.w,o.d)/2+LAND.clear);
+    for(const d of plan.districts)for(const b of d.blocks){if(b.pad){const xs=b.pad.map(p=>p.x),ys=b.pad.map(p=>p.y);for(let x=Math.min(...xs);x<=Math.max(...xs);x+=C)for(let y=Math.min(...ys);y<=Math.max(...ys);y+=C)if(inside({x,y},b.pad)){stamp(built,x,y,LAND.clear);stamp(solid,x,y,C/2);}}else stamp(built,b.x,b.y,(b.size||0)/2+LAND.clear);}
+    // `solid` is what a farm road may never cross: buildings, service sites and block pads, without the clearing.
+    for(const nd of plan.nodes){stamp(built,nd.rcx??nd.x+nd.w/2,nd.rcy??nd.y+nd.d/2,Math.hypot(nd.w,nd.d)/2+LAND.clear);stamp(solid,nd.rcx??nd.x+nd.w/2,nd.rcy??nd.y+nd.d/2,Math.hypot(nd.w,nd.d)/2);}
+    for(const o of plan.scenery)if(o.kind==='service'){stamp(built,o.rcx??o.x+o.w/2,o.rcy??o.y+o.d/2,Math.hypot(o.w,o.d)/2+LAND.clear);stamp(solid,o.rcx??o.x+o.w/2,o.rcy??o.y+o.d/2,Math.hypot(o.w,o.d)/2+4);}
     if(plan.plaza)for(const p of plan.plaza)stamp(built,p.x,p.y,LAND.clear*2);
     // Distance to the city in cells (chamfer 3-4), the axis of the land-use rings.
     const dist=new Float32Array(n*n).fill(1e9),queue=[];for(let k=0;k<n*n;k++)if(built[k]){dist[k]=0;queue.push(k);}
@@ -453,18 +480,32 @@
     const source=first.points[0],mouth=last.points[last.points.length-1],unit=v=>{const l=Math.hypot(v.x,v.y)||1;return {x:v.x/l,y:v.y/l};};
     const up=unit({x:source.x-first.points[Math.min(4,first.points.length-1)].x,y:source.y-first.points[Math.min(4,first.points.length-1)].y});
     const down=unit({x:mouth.x-last.points[Math.max(0,last.points.length-5)].x,y:mouth.y-last.points[Math.max(0,last.points.length-5)].y});
-    const upper=course(source,up,LAND.upstream,first.width,rand,false),lower=course(mouth,down,LAND.downstream,last.width,rand,true);
+    // The sea comes as close as the city allows: its coast lies just past the last built cell along the river's
+    // direction (plus the beach, the wave and a margin). If that is before the river's end, the sea takes the rest.
+    let reachDown=-Infinity;for(let k=0;k<n*n;k++)if(built[k]){const x=x0+(k%n+.5)*C-mouth.x,y=y0+(Math.floor(k/n)+.5)*C-mouth.y;reachDown=Math.max(reachDown,x*down.x+y*down.y);}
+    const coastAt=Math.max(-LAND.downstream,reachDown+LAND.beach+LAND.coastWave*1.3+LAND.seaMargin);
+    const upper=course(source,up,LAND.upstream,first.width,rand,false),lower=coastAt>0?course(mouth,down,coastAt,last.width,rand,true):[{...mouth,w:last.width}];
     waterRibbon(B,upper,shore,water);waterRibbon(B,lower,shore,water);
     const main=[...upper.slice().reverse(),...rivers.flatMap(r=>r.points.map(p=>({...p,w:r.width}))),...lower];
     for(const line of [main])along(wet,line,a=>(a.w||20)/2+6),along(riparian,line,a=>(a.w||20)/2+LAND.riparian);
     for(const r of rivers)if(r.waterOutline)for(const p of r.waterOutline)stamp(wet,p.x,p.y,6);
     // Sea: a wavy coast with a beach across the downstream direction, past the estuary.
-    const end=lower[lower.length-1],across={x:-down.y,y:down.x},coast=[];
-    for(let s=-G/4;s<=G/4;s+=G/200){const wave=Math.abs(s)<3000?Math.sin(s/260)*LAND.coastWave+Math.sin(s/97)*LAND.coastWave*.3:0;coast.push({x:end.x+across.x*s+down.x*wave,y:end.y+across.y*s+down.y*wave});}
+    const end={x:mouth.x+down.x*coastAt,y:mouth.y+down.y*coastAt},across={x:-down.y,y:down.x},coast=[];
+    // Bays and headlands: noise of two scales along the shore, flat at the river mouth so the estuary meets open water.
+    const shoreWave=s=>Math.abs(s)<LAND.bayReach?((fbm(s,0,LAND.bayScale)-.5)*LAND.bayDepth+Math.sin(s/97)*LAND.coastWave*.3)*Math.min(1,Math.abs(s)/LAND.mouthCalm):0;
+    for(let s=-G/4;s<=G/4;s+=Math.abs(s)<LAND.bayReach?LAND.coastStep:G/200){const wave=shoreWave(s);coast.push({x:end.x+across.x*s+down.x*wave,y:end.y+across.y*s+down.y*wave});}
     const offshore=coast.map(p=>({x:p.x+down.x*G/2,y:p.y+down.y*G/2})).reverse(),beachLine=coast.map(p=>({x:p.x-down.x*LAND.beach,y:p.y-down.y*LAND.beach}));
-    polygon(B,[...beachLine,...coast.slice().reverse()],Z.terrain-.1,c('#e0d3a8','#7a7560'),triangulate);
-    polygon(B,[...coast,...offshore],Z.water-.2,c('#5f9aa8','#264656'),triangulate);
-    const seaGap=p=>(p.x-end.x)*down.x+(p.y-end.y)*down.y,dry=p=>seaGap(p)<-LAND.beach-20;
+    polygon(B,[...beachLine,...coast.slice().reverse()],Z.terrain-LAYER.beach,c('#e0d3a8','#7a7560'),triangulate);
+    // Wet sand at the waterline and a line of surf just offshore; the sea lies above the river so it takes the estuary.
+    const wetLine=coast.map(p=>({x:p.x-down.x*LAND.wetSand,y:p.y-down.y*LAND.wetSand}));polygon(B,[...wetLine,...coast.slice().reverse()],Z.terrain-LAYER.beach+.5,c('#c9b98a','#665f4c'),triangulate);
+    polygon(B,[...coast,...offshore],Z.water+LAND.seaLift,c('#5f9aa8','#264656'),triangulate);
+    const surf=d=>coast.map(p=>({x:p.x+down.x*d,y:p.y+down.y*d}));polygon(B,[...surf(LAND.surf[0]),...surf(LAND.surf[1]).reverse()],Z.water+LAND.seaLift+.3,c('#e4eeea','#6f8a8c'),triangulate);
+    for(let i=0;i<beachLine.length-1;i++){const a=beachLine[i],b=beachLine[i+1],l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<l;s+=LAND.duneStep){const t=s/l,back=rand()*LAND.duneDepth,p={x:a.x+(b.x-a.x)*t-down.x*back,y:a.y+(b.y-a.y)*t-down.y*back},k=cellOf(p);if(rand()<LAND.duneGap)continue;
+      if(k>=0&&!built[k]&&Math.hypot(p.x-end.x,p.y-end.y)<LAND.duneReach&&!rivers.some(r=>lineGap(p,r.points)<r.width/2+LAND.riparian)&&lineGap(p,lower)>LAND.riparian)trees.push({wild:true,x:p.x,y:p.y,size:4+rand()*3,conifer:false,tone:1.1+rand()*.15});}}
+    life.coast={x:end.x,y:end.y,down,across,beach:LAND.beach};
+    // Sea lanes for boats and glints follow the real wavy shore.
+    life.shore=coast.filter(p=>Math.hypot(p.x-end.x,p.y-end.y)<LAND.bayReach);
+    const seaGap=p=>{const dx=p.x-end.x,dy=p.y-end.y;return dx*down.x+dy*down.y-shoreWave(dx*across.x+dy*across.y);},dry=p=>seaGap(p)<-LAND.beach-20;
     // Mountains around the source, a valley left open for the river; forest only on their lower slopes.
     const peaks=[],rock=c('#7d8471','#39433c'),snow=c('#f2f2ec','#b9c2c4'),slope=c('#8f9a78','#3e4a3e'),ridge={x:source.x+up.x*LAND.upstream*.8,y:source.y+up.y*LAND.upstream*.8};
     for(let k=0;k<LAND.mountains;k++){
@@ -472,7 +513,7 @@
       if(Math.abs(angle)<LAND.valley&&d<LAND.upstream*.9)continue;
       const dir={x:up.x*Math.cos(angle)-up.y*Math.sin(angle),y:up.x*Math.sin(angle)+up.y*Math.cos(angle)},p={x:ridge.x+dir.x*d-up.x*LAND.mountainNear,y:ridge.y+dir.y*d-up.y*LAND.mountainNear};
       const scale=.5+d/LAND.mountainFar,r=(180+rand()*240)*scale,h=(260+rand()*420)*scale;
-      if(lineGap(p,upper)<r*.6||Math.hypot(p.x-centre.x,p.y-centre.y)<reach+r)continue;
+      if(lineGap(p,upper)<r*.6||Math.hypot(p.x-centre.x,p.y-centre.y)<reach+r||seaGap(p)>-LAND.beach-r)continue;
       peaks.push({...p,r});const sides=7,top={x:p.x+(rand()-.5)*r*.3,y:p.y+(rand()-.5)*r*.3},cap=.62+rand()*.1,ring=[];
       for(let i=0;i<sides;i++){const a=i/sides*Math.PI*2+rand()*.3,rr=r*(.8+rand()*.35);ring.push({x:p.x+Math.cos(a)*rr,y:p.y+Math.sin(a)*rr});}
       for(let i=0;i<sides;i++){const a=ring[i],b=ring[(i+1)%sides],mid=q=>({x:q.x+(top.x-q.x)*cap,y:q.y+(top.y-q.y)*cap});const ma=mid(a),mb=mid(b),z0=Z.terrain-.2,zc=Z.terrain+h*cap;
@@ -499,36 +540,151 @@
       for(let b=0;b<count1;b++){const at=trunk[Math.floor((b+1)/(count1+1)*trunk.length)],q=trunk[Math.max(0,trunk.indexOf(at)-2)],dir=Math.atan2(at.y-q.y,at.x-q.x),bs=b%2?1:-1;
         grow(at,dir+bs*(LAND.junction+(rand()-.5)*2*LAND.junctionJitter),1,mainWidth*ratio1,len1*(.7+rand()*.6),mainWet);}
     }
+    // Coastal rivers (LS-08): independent order-2 rivers reach the sea along the coast, each grown upstream from its
+    // mouth so it narrows inland, with order-1 tributaries joining at ~72°. They stay clear of the city and the main river.
+    const shoreAt=(s,d)=>({x:end.x+across.x*s+down.x*(shoreWave(s)+d),y:end.y+across.y*s+down.y*(shoreWave(s)+d)});
+    for(const s of LAND.coastRivers){const mouthP=shoreAt(s,-LAND.beach-30);
+      const k=cellOf(mouthP);if(k<0||built[k]||lineGap(mouthP,main)<LAND.coastRiverGap)continue;
+      const inland=Math.atan2(-down.y,-down.x)+(rand()-.5)*.6,width=mainWidth*LAND.coastRiverWidth;
+      const trunk=grow(mouthP,inland,2,width,LAND.coastRiverLength[0]+rand()*LAND.coastRiverLength[1],mainWet);if(!trunk)continue;
+      trunk.unshift({...shoreAt(s,LAND.beach*.6),w:width},{...shoreAt(s,0),w:width});
+      for(let b=0;b<2;b++){const at=trunk[Math.floor((b+1)/3*trunk.length)],q=trunk[Math.max(0,trunk.indexOf(at)-2)],dir=Math.atan2(at.y-q.y,at.x-q.x);
+        grow(at,dir+(b?1:-1)*(LAND.junction+(rand()-.5)*2*LAND.junctionJitter),1,width*.55,LAND.orders[1][3]*(.7+rand()*.6),mainWet);}}
+    life.water=[];for(const line of [main,...streams])for(let i=0;i<line.length;i+=4)life.water.push({x:line[i].x,y:line[i].y,w:line[i].w||20});
     for(const line of streams){waterRibbon(B,line,shore,water);along(wet,line,a=>a.w/2+4);along(riparian,line,a=>a.w/2+LAND.riparian);}
     // Forestness: far from the city and on noise highs; the forest edge is its 0.5 contour.
-    const forestness=p=>{const d=cityGap(p);let f=smooth(LAND.fieldsEnd*.55,LAND.fieldsEnd*1.4,d)+(fbm(p.x,p.y,650)-.5)*LAND.noise;if(d<LAND.meadow)f-=1-d/LAND.meadow;return f+nearPeak(p)*.6;};
+    // Distance to the river network: farmland follows the flat valley, forest keeps the higher ground between rivers.
+    const riverDist=new Float32Array(n*n).fill(1e9);for(let k=0;k<n*n;k++)if(wet[k])riverDist[k]=0;
+    for(let pass=0;pass<2;pass++)for(let jj=0;jj<n;jj++)for(let ii=0;ii<n;ii++){const i=pass?n-1-ii:ii,j=pass?n-1-jj:jj,k=i+j*n,s=pass?1:-1;
+      for(const [di,dj,w] of [[s,0,1],[0,s,1],[s,s,1.414],[-s,s,1.414]]){const a=i+di,b=j+dj;if(a>=0&&b>=0&&a<n&&b<n&&riverDist[a+b*n]+w<riverDist[k])riverDist[k]=riverDist[a+b*n]+w;}}
+    const valley=p=>{const k=cellOf(p);return k<0?0:Math.exp(-riverDist[k]*C/LAND.valleyReach);};
+    const forestness=p=>{const d=cityGap(p);let f=.15+smooth(LAND.fieldsEnd*.1,LAND.fieldsEnd*3.5,d)*.8+(fbm(p.x,p.y,1400)-.5)*LAND.noise+(fbm(p.x+911,p.y-377,320)-.5)*LAND.detail-valley(p)*LAND.valley;
+      if(d<LAND.meadow)f-=1-d/LAND.meadow;return f+nearPeak(p)*.6;};
+    // Fields (LS-11): only project reference data farms land. Each project's fields form one block beyond the city on
+    // the side of its district, reached by a farm road from the city edge; shelterbelts line the road and the gaps
+    // between fields. Each field is one document, sized by its length; without such documents there are no fields.
+    const crops=FARM.crops.map(h=>day?colour(h):scale(colour(h),.42)),dirt=c('#a88d62','#5a5141'),farm=new Uint8Array(n*n);
+    const groups=new Map();for(const s of plan.sources||[])if(s.cityField&&s.available!==false){const key=s.project||s.district;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(s);}
+    const fieldOk=p=>{const k=cellOf(p);return k>=0&&!built[k]&&!wet[k]&&!farm[k]&&dry(p)&&!onPeak(p);};
+    const belt=(a,b,offset)=>{const dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy)||1,ox=-dy/l*offset,oy=dx/l*offset;
+      for(let s=FARM.beltStep/2;s<l;s+=FARM.beltStep){const p={x:a.x+dx*s/l+ox,y:a.y+dy*s/l+oy};if(fieldOk(p))trees.push({wild:true,x:p.x,y:p.y,size:FARM.beltSize[0]+rand()*FARM.beltSize[1],conifer:rand()<.2,tone:.95+rand()*.15});}};
+    // A farm road joins the nearest city street that reaches the fields without crossing built land again or the sea.
+    const link=A=>{const ends=plan.roads.flatMap(r=>r.points).sort((p,q)=>Math.hypot(p.x-A.x,p.y-A.y)-Math.hypot(q.x-A.x,q.y-A.y));
+      for(const S of ends.slice(0,FARM.linkTries)){const l=Math.hypot(A.x-S.x,A.y-S.y);let leaving=true,clear=l>0;
+        for(let s=0;s<l&&clear;s+=C/2){const p={x:S.x+(A.x-S.x)*s/l,y:S.y+(A.y-S.y)*s/l},k=cellOf(p);if(k<0||!dry(p)||onPeak(p)||(s>C&&solid[k])){clear=false;break;}
+          if(built[k]){if(!leaving)clear=false;}else leaving=false;}
+        if(clear)return [S];}
+      return detour(A);};
+    // Otherwise the cheapest grid path from the fields to any street cell: never through solid or the sea, water costs
+    // a bridge; then straightened by line of sight so the road runs in a few long straight pieces.
+    const street=new Uint8Array(n*n);for(const r of plan.roads)along(street,r.points,r.width/2);
+    const passable=k=>k>=0&&!solid[k]&&!street[k];
+    const detour=A=>{
+      const start=cellOf(A);if(start<0)return null;const cost=new Float32Array(n*n).fill(Infinity),from=new Int32Array(n*n).fill(-1),heap=[[0,start]];cost[start]=0;let goal=-1;
+      const push=(c,k)=>{heap.push([c,k]);let i=heap.length-1;while(i>0){const p=(i-1)>>1;if(heap[p][0]<=heap[i][0])break;[heap[p],heap[i]]=[heap[i],heap[p]];i=p;}};
+      const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===i)break;[heap[m],heap[i]]=[heap[i],heap[m]];i=m;}}return top;};
+      while(heap.length){const [c,k]=pop();if(c>cost[k])continue;if(street[k]){goal=k;break;}const i=k%n,j=(k-i)/n;
+        for(const [di,dj,w] of [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=n||b>=n)continue;const q=a+b*n;
+          if(solid[q])continue;const p={x:x0+(a+.5)*C,y:y0+(b+.5)*C};if(!dry(p)||onPeak(p))continue;const step=w*(wet[q]?FARM.bridgeCost:built[q]?FARM.builtCost:1);
+          if(c+step<cost[q]){cost[q]=c+step;from[q]=k;push(c+step,q);}}}
+      if(goal<0)return null;
+      const cells=[];for(let k=goal;k>=0;k=from[k])cells.push({x:x0+(k%n+.5)*C,y:y0+(Math.floor(k/n)+.5)*C});
+      const sight=(a,b)=>{const l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<=l;s+=C/3){const k=cellOf({x:a.x+(b.x-a.x)*s/l,y:a.y+(b.y-a.y)*s/l});if(k<0||solid[k])return false;}return true;};
+      const path=[cells[0]];for(let i=0;i<cells.length-1;){let j=cells.length-1;while(j>i+1&&!sight(cells[i],cells[j]))j--;path.push(cells[j]);i=j;}
+      return path.slice(0,-1);};
+    const roadZ=Z.shore+FARM.roadLift,verge=c('#8f7a55','#4b4438'),tint=h=>day?colour(h):scale(colour(h),.42);
+    const field=(f,seed)=>{
+      // One crop per document: a grass margin, the crop, then rows, tramlines, bales, flower heads or orchard trees.
+      const kind=FARM.kinds[seed%FARM.kinds.length],[q0,q1,,q3]=f.q,pt=(s,t,z)=>[q0.x+(q1.x-q0.x)*s+(q3.x-q0.x)*t,q0.y+(q1.y-q0.y)*s+(q3.y-q0.y)*t,z];
+      const z0=Z.terrain+FARM.lift,z1=z0+FARM.layer,z2=z1+FARM.layer,m=FARM.margin/Math.min(f.w,f.depth),rect=(s0,t0,s1,t1,z,col)=>B.quad(pt(s0,t0,z),pt(s1,t0,z),pt(s1,t1,z),pt(s0,t1,z),col);
+      rect(0,0,1,1,z0,tint('#9fb57c'));rect(m,m,1-m,1-m,z1,tint(kind.base));
+      const across=(seed>>4)%2===0,length=across?f.w:f.depth,count=Math.floor((across?f.depth:f.w)/kind.spacing);
+      if(kind.row)for(let i=1;i<count;i++){const t=i/count;if(t<m||t>1-m)continue;const half=kind.width/2/(across?f.depth:f.w);
+        if(across)rect(m,t-half,1-m,t+half,z2,tint(kind.row));else rect(t-half,m,t+half,1-m,z2,tint(kind.row));}
+      if(kind.tramline)for(const t of [.33,.66]){const half=1.2/(across?f.depth:f.w);if(across)rect(m,t-half,1-m,t+half,z2+FARM.layer,tint(kind.tramline));else rect(t-half,m,t+half,1-m,z2+FARM.layer,tint(kind.tramline));}
+      const P=painter(B,B,{W:0,D:0,at:(u,v,z)=>pt(u,v,z)},0,q=>q),rnd=random(String(seed));
+      if(kind.bales)for(let i=0;i<kind.bales;i++){const s=m*2+rnd()*(1-m*4),t=m*2+rnd()*(1-m*4),[x,y]=pt(s,t,0),Q=painter(B,B,{W:0,D:0,at:(u,v,z)=>[u,v,z]},0,q=>q);Q.cylinder(x,y,3.2,z2,3.4,tint('#d9c27a'),tint('#e8d79a'),8);}
+      if(kind.heads)for(let i=1;i<count;i+=1)for(let k=1;k<length/kind.spacing;k++){const a=k/(length/kind.spacing),b=i/count;if(a<m||a>1-m||b<m||b>1-m||rnd()<.35)continue;const [x,y]=across?pt(a,b,0):pt(b,a,0),Q=painter(B,B,{W:0,D:0,at:(u,v,z)=>[u,v,z]},0,q=>q);Q.disc(x,y,1.6,1.6,z2+.3,tint(kind.heads),false,6);}
+      if(kind.orchard)for(let i=1;i<count;i++)for(let k=1;k<length/kind.spacing;k++){const a=k/(length/kind.spacing),b=i/count;if(a<m*2||a>1-m*2||b<m*2||b>1-m*2)continue;const [x,y]=across?pt(a,b,0):pt(b,a,0);trees.push({wild:true,x,y,size:7+rnd()*2,conifer:false,tone:1.05+rnd()*.15});}
+    };
+    const farmstead=(at,ax)=>{
+      // A barn and a silo beside the farm road, where it reaches the fields.
+      const spot=at(FARM.gap,-(FARM.road/2+FARM.gap+FARM.barn[1])),ay={x:-ax.y,y:ax.x};if(!fieldOk(spot))return;
+      const P=painter(B,B,{W:0,D:0,at:(u,v,z)=>[spot.x+ax.x*u+ay.x*v,spot.y+ax.y*u+ay.y*v,z]},Z.terrain+FARM.lift,q=>q),[bw,bd,bh]=FARM.barn;
+      P.box(0,0,bw,bd,bh,tint('#a5523f'));P.roofX(-1,-1,bw+2,bd+2,bh,7,tint('#6b6b66'),tint('#a5523f'));P.face([[bw*.4,bd+.3,0],[bw*.6,bd+.3,0],[bw*.6,bd+.3,bh*.7],[bw*.4,bd+.3,bh*.7]],tint('#5a3b2c'));
+      P.cylinder(bw+7,bd/2,4,0,20,tint('#c9c9c0'));P.dome(bw+7,bd/2,4,20,tint('#9aa3a0'));
+      stamp(farm,spot.x,spot.y,bw);
+    };
+    const farmRoad=route=>{
+      // Gravel on a darker verge; where it meets water it rises onto a small bridge with rails.
+      const P=painter(B,B,{W:0,D:0,at:(u,v,z)=>[u,v,z]},0,q=>q),rail=c('#788b80','#9ba99b'),deck=c('#b5a98c','#6d6656');
+      for(let i=1;i<route.length;i++){const a=route[i-1],b=route[i],l=Math.hypot(b.x-a.x,b.y-a.y);if(!l)continue;const dx=(b.x-a.x)/l,dy=(b.y-a.y)/l,nx=-dy,ny=dx;let run=[];
+        const flush=wetRun=>{if(run.length<2){run=[];return;}const p0=run[0],p1=run[run.length-1];
+          if(!wetRun){ribbon(B,[p0,p1],FARM.road+4,roadZ-.1,verge);ribbon(B,[p0,p1],FARM.road,roadZ,dirt);}
+          else{const w=FARM.road/2+1,z=Z.bridge,e0={x:p0.x-dx*FARM.ramp,y:p0.y-dy*FARM.ramp},e1={x:p1.x+dx*FARM.ramp,y:p1.y+dy*FARM.ramp};
+            B.quad([e0.x+nx*w,e0.y+ny*w,roadZ],[p0.x+nx*w,p0.y+ny*w,z],[p0.x-nx*w,p0.y-ny*w,z],[e0.x-nx*w,e0.y-ny*w,roadZ],deck);
+            B.quad([p0.x+nx*w,p0.y+ny*w,z],[p1.x+nx*w,p1.y+ny*w,z],[p1.x-nx*w,p1.y-ny*w,z],[p0.x-nx*w,p0.y-ny*w,z],deck);
+            B.quad([p1.x+nx*w,p1.y+ny*w,z],[e1.x+nx*w,e1.y+ny*w,roadZ],[e1.x-nx*w,e1.y-ny*w,roadZ],[p1.x-nx*w,p1.y-ny*w,z],deck);
+            for(const side of [-1,1])P.stick([p0.x+nx*w*side,p0.y+ny*w*side,z+3],[p1.x+nx*w*side,p1.y+ny*w*side,z+3],rail,.8);}
+          run=[];};
+        let wetNow=null;for(let s=0;s<=l;s+=FARM.roadStep){const p={x:a.x+dx*Math.min(s,l),y:a.y+dy*Math.min(s,l)},k=cellOf(p),w=k>=0&&!!wet[k];
+          if(wetNow!==null&&w!==wetNow){run.push(p);flush(wetNow);}if(!run.length||run[run.length-1]!==p)run.push(p);wetNow=w;}
+        const end={x:b.x,y:b.y};run.push(end);flush(wetNow);}
+    };
+    for(const [key,docs] of [...groups].sort((p,q)=>p[0]<q[0]?-1:1)){
+      docs.sort((p,q)=>p.id<q.id?-1:1);const district=plan.districts.find(d=>d.id===docs[0].district)||plan.districts[0];
+      const base=Math.atan2(district.label.y-centre.y,district.label.x-centre.x)||hash32(key)%628/100;
+      const sides=docs.map(d=>Math.max(FARM.side[0],Math.min(FARM.side[1],FARM.side[0]+Math.sqrt(d.words||0)*FARM.perWord))),cols=Math.ceil(Math.sqrt(docs.length));
+      let done=false;
+      for(const push of FARM.push)for(const turn of [0,.25,-.25,.5,-.5,.75,-.75,1,-1,1.4,-1.4,1.8,-1.8,Math.PI]){if(done)break;
+        const ax={x:Math.cos(base+turn),y:Math.sin(base+turn)},ay={x:-ax.y,y:ax.x};let edge=null;
+        for(let r=0;r<half;r+=C){const p={x:centre.x+ax.x*r,y:centre.y+ax.y*r};if(cityGap(p)>LAND.meadow*.6&&dry(p)){edge=p;break;}}
+        if(!edge)continue;
+        // Lay fields in rows across the road, outwards from the city; every field must stand on free, dry land.
+        const placed=[];let row=0,v=FARM.gap+push,ok=true;
+        while(placed.length<docs.length&&row<cols*3){const rowDocs=docs.slice(placed.length,placed.length+cols),rowDepth=Math.max(...rowDocs.map((_,i)=>sides[placed.length+i]));let u=FARM.road/2+FARM.gap,fits=true;const row_=[];
+          for(let i=0;i<rowDocs.length;i++){const w=sides[placed.length+i],at=(a,b)=>({x:edge.x+ax.x*a+ay.x*b,y:edge.y+ax.y*a+ay.y*b}),q=[at(v,u),at(v,u+w),at(v+rowDepth,u+w),at(v+rowDepth,u)];
+            if(![...q,at(v+rowDepth/2,u+w/2)].every(fieldOk)){fits=false;break;}row_.push({doc:rowDocs[i],q,u,w,depth:rowDepth,v});u+=w+FARM.gap;}
+          if(!fits){ok=false;break;}placed.push(...row_);v+=rowDepth+FARM.gap;row++;}
+        if(!ok||!placed.length)continue;
+        const at=(a,b)=>({x:edge.x+ax.x*a+ay.x*b,y:edge.y+ax.y*a+ay.y*b}),far=v;
+        // Farm road from the city edge along one side of the block, shelterbelts on both sides of it.
+        const roadA=at(0,0),roadB=at(far,0),approach=link(roadA)||[],route=[...approach,roadA,roadB];
+        farmRoad(route);
+        for(let i=1;i<route.length;i++){belt(route[i-1],route[i],FARM.road/2+FARM.gap*.35);belt(route[i-1],route[i],-(FARM.road/2+FARM.gap*.35));}
+        for(let i=1;i<route.length;i++){const a=route[i-1],b=route[i],l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<=l;s+=C/2)stamp(farm,a.x+(b.x-a.x)*s/l,a.y+(b.y-a.y)*s/l,FARM.road);}
+        for(const f of placed){
+          field(f,hash32(f.doc.id));
+          for(const p of f.q)stamp(farm,p.x,p.y,FARM.gap);for(let a=0;a<=1;a+=.25)for(let b=0;b<=1;b+=.25)stamp(farm,f.q[0].x+(f.q[1].x-f.q[0].x)*a+(f.q[3].x-f.q[0].x)*b,f.q[0].y+(f.q[1].y-f.q[0].y)*a+(f.q[3].y-f.q[0].y)*b,FARM.gap);
+          belt(at(f.v+f.depth+FARM.gap/2,f.u),at(f.v+f.depth+FARM.gap/2,f.u+f.w),0);belt(at(f.v,f.u-FARM.gap/2),at(f.v+f.depth,f.u-FARM.gap/2),0);
+          const mid=at(f.v+f.depth/2,f.u+f.w/2);fields.push({node:f.doc,cx:mid.x,cy:mid.y,w:f.depth,d:f.w,h:2,z:Z.terrain+FARM.lift,rot:Math.atan2(ax.y,ax.x),field:true});}
+        for(let r=0;r<=far;r+=C)stamp(farm,at(r,0).x,at(r,0).y,FARM.road);
+        farmstead(at,ax);
+        done=true;
+      }
+    }
     // Ground colour grid: meadow near the city, a light fringe at the edge, forest floor inside.
-    const S=LAND.ground,gn=Math.ceil(2*half/S),gx0=centre.x-half,gy0=centre.y-half,tone=p=>{const f=forestness(p);return f<.44?meadow:f<.5?mix(meadow,fringe,(f-.44)/.06):f<.56?mix(fringe,floor,(f-.5)/.06):floor;};
+    // The square edge of the landscape band never shows: towards it the ground turns to forest floor and the forest
+    // thins out along a noisy ring, so the plane beyond reads as the same land fading into the haze.
+    const rim=p=>smooth(half*LAND.rim[0],half*LAND.rim[1],Math.hypot(p.x-centre.x,p.y-centre.y)+(fbm(p.x-1733,p.y+911,900)-.5)*LAND.rimNoise);
+    const S=LAND.groundCell,gn=Math.ceil(2*half/S),gx0=centre.x-half,gy0=centre.y-half,tone=p=>{const k=cellOf(p);if(k>=0&&farm[k])return meadow;return mix(baseTone(p),floor,rim(p));},baseTone=p=>{const f=forestness(p);return f<.44?meadow:f<.5?mix(meadow,fringe,(f-.44)/.06):f<.56?mix(fringe,floor,(f-.5)/.06):floor;};
     const corner=[];for(let j=0;j<=gn;j++)for(let i=0;i<=gn;i++){const p={x:gx0+i*S,y:gy0+j*S};corner.push(tone(p));}
-    for(let j=0;j<gn;j++)for(let i=0;i<gn;i++){const x=gx0+i*S,y=gy0+j*S,k=i+j*(gn+1),cols=[corner[k],corner[k+1],corner[k+gn+2],corner[k+gn+1]],avg=cols.reduce((s,q)=>s.map((v,m)=>v+q[m]/4),[0,0,0]);
-      B.quad([x,y,Z.terrain-.25],[x+S,y,Z.terrain-.25],[x+S,y+S,Z.terrain-.25],[x,y+S,Z.terrain-.25],avg);}
-    // Fields: parcels along the valley axis in the farmland ring, crops of several colours, some hedgerows.
-    const crops=['#d8c27a','#9bbd6a','#b9cf86','#a88a62','#a7c08a','#d9d36a','#c4b07a'].map(h=>day?colour(h):scale(colour(h),.42));
-    const ax={x:down.x,y:down.y},ay={x:-down.y,y:down.x},span=reach+LAND.fieldsEnd*1.5;
-    for(let v=-span;v<span;){const rowH=LAND.field.min+rand()*(LAND.field.max-LAND.field.min)*.8;
-      for(let u=-span;u<span;){const colW=LAND.field.min+rand()*(LAND.field.max-LAND.field.min),at=(a,b)=>({x:centre.x+ax.x*a+ay.x*b,y:centre.y+ax.y*a+ay.y*b});
-        const corners=[at(u+4,v+4),at(u+colW-4,v+4),at(u+colW-4,v+rowH-4),at(u+4,v+rowH-4)],mid=at(u+colW/2,v+rowH/2);
-        const ok=[mid,...corners].every(p=>{const k=cellOf(p);return k>=0&&!built[k]&&!wet[k]&&!riparian[k]&&dry(p)&&!onPeak(p)&&forestness(p)<.44&&cityGap(p)>LAND.meadow*.6;});
-        if(ok){B.quad([corners[0].x,corners[0].y,Z.terrain-.15],[corners[1].x,corners[1].y,Z.terrain-.15],[corners[2].x,corners[2].y,Z.terrain-.15],[corners[3].x,corners[3].y,Z.terrain-.15],crops[Math.floor(rand()*crops.length)]);
-          if(rand()<LAND.hedge){const a=at(u,v),b=at(u+colW,v),l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<l;s+=LAND.hedgeStep)trees.push({x:a.x+(b.x-a.x)*s/l,y:a.y+(b.y-a.y)*s/l,size:5+rand()*3,conifer:false,tone:.9+rand()*.15});}}
-        u+=colW;}
-      v+=rowH;}
+    for(let j=0;j<gn;j++)for(let i=0;i<gn;i++){const x=gx0+i*S,y=gy0+j*S,k=i+j*(gn+1);
+      // Cells under and around the city go to the ground chunk, which receives building shadows.
+      const into=x+S>t.minX&&x<t.maxX&&y+S>t.minY&&y<t.maxY?near:B;
+      into.shaded([x,y,Z.terrain-LAYER.grid],[x+S,y,Z.terrain-LAYER.grid],[x+S,y+S,Z.terrain-LAYER.grid],[x,y+S,Z.terrain-LAYER.grid],corner[k],corner[k+1],corner[k+gn+2],corner[k+gn+1]);}
     // Trees: jittered sampling, thinning with distance; layered edge, clustered gaps, species by depth and terrain.
     for(let gy=y0;gy<y0+2*half;gy+=LAND.step)for(let gx=x0;gx<x0+2*half;gx+=LAND.step){
-      const p={x:gx+(rand()-.5)*LAND.step*.9,y:gy+(rand()-.5)*LAND.step*.9},k=cellOf(p);if(k<0||built[k]||wet[k]||!dry(p)||onPeak(p))continue;
+      const p={x:gx+(rand()-.5)*LAND.step*.9,y:gy+(rand()-.5)*LAND.step*.9},k=cellOf(p);if(k<0||built[k]||wet[k]||farm[k]||!dry(p)||onPeak(p))continue;
+      const fade=1-rim(p);if(fade<=0||rand()>fade)continue;
       const d=cityGap(p),thin=LAND.step/(LAND.step+Math.max(0,d-LAND.thinFrom)*LAND.thin*LAND.step),roll=rand();
-      if(riparian[k]){if(roll<.55*thin)trees.push({x:p.x,y:p.y,size:(9+rand()*9)/Math.sqrt(thin),conifer:false,tone:.95+rand()*.2});continue;}
+      if(riparian[k]){if(roll<.55*thin)trees.push({wild:true,x:p.x,y:p.y,size:(9+rand()*9)/Math.sqrt(thin),conifer:false,tone:.95+rand()*.2});continue;}
       const depth=forestness(p)-.5;if(depth<LAND.edge.fringe)continue;
       const gap=fbm(p.x,p.y,LAND.gapScales[0])*.5+fbm(p.x,p.y,LAND.gapScales[1])*.5;if(depth>LAND.edge.mantle&&gap>LAND.gap)continue;
       const zone=depth<LAND.edge.shrub?['shrub',.35,5,4]:depth<LAND.edge.mantle?['mantle',.6,11,7]:['interior',.8,15,13];
       if(roll>zone[1]*thin)continue;
       const conifer=zone[0]!=='shrub'&&rand()<Math.min(.85,.2+Math.max(0,depth-.1)*1.4+nearPeak(p)*.6);
-      trees.push({x:p.x,y:p.y,size:(zone[2]+rand()*zone[3])/Math.sqrt(thin),conifer,tone:zone[0]==='mantle'&&!conifer?1.05+rand()*.2:.85+rand()*.2});
+      trees.push({wild:true,x:p.x,y:p.y,size:(zone[2]+rand()*zone[3])/Math.sqrt(thin),conifer,tone:zone[0]==='mantle'&&!conifer?1.05+rand()*.2:.85+rand()*.2});
     }
   }
 
@@ -555,7 +711,7 @@
    */
   function build(plan,{day=false,matches=()=>true,triangulate}){
     const chunks=new Map(),chunk=key=>{if(!chunks.has(key))chunks.set(key,{lit:new Buffer(),glow:new Buffer()});return chunks.get(key);},picks=[],trees=[],lamps=[];
-    ground(chunk('ground').lit,plan,day,triangulate);landscape(chunk('landscape').lit,plan,day,triangulate,trees);const sources=new Map((plan.sources||[]).map(s=>[s.id,s]));
+    ground(chunk('ground').lit,plan,day,triangulate);const fields=[];const life={};landscape(chunk('landscape').lit,plan,day,triangulate,trees,fields,chunk('ground').lit,life);picks.push(...fields);const sources=new Map((plan.sources||[]).map(s=>[s.id,s]));
     for(const n of plan.nodes){const c=chunk('district:'+n.district),members=(n.members||[]).map(id=>sources.get(id)).filter(Boolean);
       const faded=!(matches(n)||members.some(matches))||n.available===false,top=building(c.lit,c.glow,n,day,faded,trees);
       if(n.available!==false)picks.push({node:n,cx:n.rcx??n.x+n.w/2,cy:n.rcy??n.y+n.d/2,w:n.w,d:n.d,h:Math.max(6,top),z:Z.base,rot:n.rot||0});}
@@ -566,7 +722,8 @@
       else if(o.kind==='place'){placeModel(c.lit,c.glow,o,day);if(o.facility)picks.push({node:{...o.facility,derived:true,physicalId:o.facility.id},cx:o.x,cy:o.y,w:12,d:12,h:6,z:Z.base,rot:0});}
       else furniture(c.lit,c.glow,o,day);}
     const out=new Map();for(const [key,c] of chunks)out.set(key,{lit:c.lit.arrays(),glow:c.glow.arrays()});
-    return {chunks:out,picks,trees,lamps,ground:Z.base};
+    life.centre={x:(plan.terrain.minX+plan.terrain.maxX)/2,y:(plan.terrain.minY+plan.terrain.maxY)/2};
+    return {chunks:out,picks,trees,lamps,ground:Z.base,life};
   }
   const api={build,colour,Z,localFrame,doorSide};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CityMesh=api;
 })(typeof window!=='undefined'?window:globalThis);

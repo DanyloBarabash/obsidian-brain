@@ -20,6 +20,8 @@ If no project matches, search globally. Do not create a new project merely becau
 
 ## Save durable knowledge
 
+- Create reports, separate artifacts, exports, presentations, visualizations, and session summaries only when the user explicitly asks. Do not create or open extra deliverables automatically after a task; give a brief result in chat. This does not prevent changes to the requested product or necessary updates to existing canonical rules and project knowledge.
+
 Save only information that will improve a future task: confirmed decisions and rationale, verified fixes, current project state, stable architecture or contracts, reusable procedures, non-obvious lessons, and explicit open work. Do not store secrets, credentials, personal data, raw transcripts, speculative claims as facts, or large disposable outputs.
 
 Before writing:
@@ -33,7 +35,7 @@ Write behavior:
 
 - Use `apply_patch` for Markdown and `.base` edits.
 - Preserve neighboring formatting, language, frontmatter keys, and the hub-and-spoke link direction.
-- Put short-lived task history in `sessions/`, durable topic knowledge in `notes/`, and maintained reference material in `documents/`.
+- Create task history in `sessions/` only when explicitly requested; put durable topic knowledge in existing canonical `notes/` and maintained reference material in `documents/`.
 - Use filenames in lowercase kebab-case. Session filenames are `<project>-YYYY-MM-DD-<topic>.md`.
 - Classify every project/org hub with `class`, `domain`, `stage`, and `engagement`. Add a new top-level project to exactly one class hub; do not bypass the class level with a direct global project index.
 - Link a new content note to its own hub with `related`, then add a downward link from the hub under the matching section.
@@ -45,7 +47,7 @@ After writing, verify that the file exists, frontmatter is closed and parseable,
 
 ## Common requests
 
-- **"Запиши/збережи в Brain"**: update canonical knowledge and, for a substantial completed task, add a concise session note.
+- **"Запиши/збережи в Brain"**: update canonical knowledge; add a concise session note only when the user explicitly requests saving the session.
 - **"Що ми знаємо про ...?"**: search, rank current sources, and synthesize with vault-relative citations.
 - **"Онови стан проєкту"**: update the hub and any canonical current-state document; move stale claims into historical context rather than silently preserving contradictions.
 - **"Збережи сесію"**: capture goal, outcomes, decisions, verification, files changed, open tasks, and key learnings; omit raw chat.

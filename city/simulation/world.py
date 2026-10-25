@@ -505,27 +505,28 @@ class World:
                     # Within the class, a project's blocks stay together as a sub-quarter.
                     if other["district"] == district and quarter and other.get("neighbourhood") == quarter:
                         score -= VALUES["neighbourhood_weight"]
-                # The quarter wraps around its landmark complex instead of leaving it alone on the edge.
-                for box in complex_boxes:
-                    gap = math.hypot(max(box["x"]-x, 0, x-box["x"]-box["w"]), max(box["y"]-y, 0, y-box["y"]-box["h"]))
-                    if gap < VALUES["landmark_pull_reach"]:
-                        score -= VALUES["landmark_pull"]*(1-gap/VALUES["landmark_pull_reach"])
-                        break
             else:
                 # It starts on land beside the town, not alone across the river.
                 if self.state["blocks"] and not any(f"block:{c[0]}:{c[1]}" in self.state["blocks"] for cells in self.neighbours(*cell).values() for c in cells):
                     score += 2*VALUES["cohesion_weight"]
-            candidates.append((score, stable_hash(f"{district}:{cell[0]}:{cell[1]}"), cell))
+            # Feasibility and ownership are hard constraints above; fill one band around the complex at a time.
+            gap = min((math.hypot(max(box["x"]-envelope["x"]-envelope["w"], 0, envelope["x"]-box["x"]-box["w"]),
+                                  max(box["y"]-envelope["y"]-envelope["h"], 0, envelope["y"]-box["y"]-box["h"]))
+                       for box in complex_boxes), default=0)
+            band = int(gap // VALUES["landmark_growth_band"])
+            candidates.append((band, score, stable_hash(f"{district}:{cell[0]}:{cell[1]}"), cell))
         if not candidates:
             raise ValueError("No connected feasible land; protected land was preserved")
         candidates.sort()
-        i, s = candidates[0][2]
+        i, s = candidates[0][3]
         key = f"block:{i}:{s}"
         if not self.state["blocks"]:
             self._plaza(source, tick, key)
         cx, cy = self.cell_centre(i, s)
         block = {"id": key, "cell": [i, s], "x": cx, "y": cy, "district": district, "neighbourhood": own_neighbourhood(source),
-                 "envelope": aabb(self.cell_polygon(i, s)), "createdAt": tick}
+                 "envelope": aabb(self.cell_polygon(i, s)), "createdAt": tick,
+                 "growth": {"complex": landmark.get("id") if complex_boxes else None, "band": candidates[0][0],
+                            "score": candidates[0][1], "feasibleCandidates": len(candidates)}}
         self.state["blocks"][key] = block
         self._extend_frontier((i, s))
         if centre is None:
@@ -793,7 +794,7 @@ class World:
             left, top = min(old["x"],envelope["x"]-30), min(old["y"],envelope["y"]-30)
             right, bottom = max(old["x"]+old["w"],envelope["x"]+envelope["w"]+30), max(old["y"]+old["h"],envelope["y"]+envelope["h"]+30)
             self.state["land"] = rect(left,top,right-left,bottom-top)
-        self.emit("streetConnected", block=key, reason="Ring and radial streets shared with neighbours; full corridors reserved before parcels")
+        self.emit("streetConnected", block=key, growth=block["growth"], reason="Ring and radial streets shared with neighbours; full corridors reserved before parcels")
         return block
 
     def _gate(self, face, door):
