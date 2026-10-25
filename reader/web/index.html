@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain Reader</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header>
+  <h1>Brain Reader</h1>
+  <nav id="tabs">
+    <button data-tab="feed" class="active">Стрічка</button>
+    <button data-tab="suggestions">Пропозиції</button>
+    <button data-tab="like">Вподобані</button>
+    <button data-tab="save">У мозку</button>
+    <button data-tab="interests">Інтереси</button>
+    <button data-tab="sources">Теми й джерела</button>
+  </nav>
+  <span id="status" class="muted"></span>
+  <button id="refresh" title="Оновити джерела">⟳</button>
+</header>
+<main id="view" aria-live="polite"></main>
+<div id="toast" role="status"></div>
+</body>
+</html>

@@ -1,0 +1,37 @@
+[
+  {"topic": "LLM і агенти", "sources": [
+    {"kind": "reddit", "value": "LocalLLaMA", "label": "r/LocalLLaMA"},
+    {"kind": "reddit", "value": "ClaudeAI", "label": "r/ClaudeAI"},
+    {"kind": "medium", "value": "tag/llm", "label": "Medium · llm"},
+    {"kind": "medium", "value": "tag/ai-agents", "label": "Medium · ai-agents"},
+    {"kind": "rss", "value": "https://simonwillison.net/atom/everything/", "label": "Simon Willison"}
+  ]},
+  {"topic": "Машинне навчання", "sources": [
+    {"kind": "reddit", "value": "MachineLearning", "label": "r/MachineLearning"},
+    {"kind": "medium", "value": "tag/machine-learning", "label": "Medium · machine-learning"}
+  ]},
+  {"topic": "Комп’ютерний зір", "sources": [
+    {"kind": "reddit", "value": "computervision", "label": "r/computervision"},
+    {"kind": "medium", "value": "tag/computer-vision", "label": "Medium · computer-vision"}
+  ]},
+  {"topic": "Python і розробка", "sources": [
+    {"kind": "reddit", "value": "Python", "label": "r/Python"},
+    {"kind": "medium", "value": "tag/python", "label": "Medium · python"},
+    {"kind": "hn", "value": "front_page", "label": "Hacker News"}
+  ]},
+  {"topic": "Obsidian і нотатки", "sources": [
+    {"kind": "reddit", "value": "ObsidianMD", "label": "r/ObsidianMD"},
+    {"kind": "reddit", "value": "PKMS", "label": "r/PKMS"}
+  ]},
+  {"topic": "Спортивна аналітика", "sources": [
+    {"kind": "reddit", "value": "sportsanalytics", "label": "r/sportsanalytics"},
+    {"kind": "medium", "value": "tag/sports-analytics", "label": "Medium · sports-analytics"}
+  ]},
+  {"topic": "Енергетика", "sources": [
+    {"kind": "reddit", "value": "solar", "label": "r/solar"},
+    {"kind": "reddit", "value": "energy", "label": "r/energy"}
+  ]},
+  {"topic": "Українське IT", "sources": [
+    {"kind": "rss", "value": "https://dou.ua/feed/", "label": "DOU"}
+  ]}
+]
