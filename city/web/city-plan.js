@@ -83,6 +83,8 @@
   const mix=(a,b,t)=>toHex(rgb(a).map((v,i)=>v+(rgb(b)[i]-v)*t));
   // Each class has its own row-house silhouette and courtyard character, not only a colour.
   const ROWS={workspace:'townhouse',academy:'library-wing',observatory:'laboratory',studio:'timber-house',garden:'cottage',library:'merchant-house',sports:'training-hall'};
+  // The era a source was first observed in shifts materials: stone, brick, render, contemporary panels.
+  const ERAS=[{title:'Заснування',wall:'#b3a58c',roof:'#4f4038',mix:.38},{title:'Ранній ріст',wall:'#b06a52',roof:'#7d4334',mix:.34},{title:'Розквіт',wall:'#efe6d2',roof:null,mix:0},{title:'Сучасність',wall:'#dde2e1',roof:'#66737a',mix:.4}];
   const COURTS={workspace:'#95ad7a',academy:'#a6c98c',observatory:'#aab6c4',studio:'#d9aab0',garden:'#6f9a5c',library:'#d8ccb2',civic:'#ded0a4',sports:'#75a978'};
   function quarterStyle(d){const colour=d.color||'#c9b697',base=mix(colour,'#efe6d2',.32);return {walls:[0,1,2].map(k=>mix(base,k===1?'#ffffff':'#5b4b3b',k===0?0:.14)),roof:mix(colour,'#2d2622',.38),ground:mix('#ceccb3',colour,.36),groundNight:mix('#6a7260',colour,.34),edge:colour,court:COURTS[d.theme]||COURTS.workspace};}
   // Sub-quarters of one class alternate lighter and darker shades of its palette.
@@ -118,7 +120,7 @@
       const d=byDistrict.get(source.district)||fallback,appearance=source.appearance||{seedKey:source.id,kind:source.kind},seed=hash(appearance.seedKey),landmark=['hub','class','org'].includes(appearance.kind);
       // Narrow old-town plots carry gabled row houses; wider plots keep the class architecture.
       const f=b.footprint,narrow=f.fw<=OLD_TOWN_WIDTH;
-      const k=blockQuarter.get(b.block)||0;let model=['grand-library','town-hall','council','registry','city-archive','planning-office','infrastructure-office','district-hall','project-council','apartment-tower','manor','sports-institute','research-institute','training-hall'].includes(b.model)?b.model:landmark?architecture({...source,id:appearance.seedKey,kind:appearance.kind},d.theme):narrow?(ROWS[d.theme]||'townhouse'):b.model;const palette=d.style.walls.map(c=>shade(c,k));
+      const k=blockQuarter.get(b.block)||0;let model=['grand-library','town-hall','council','registry','city-archive','planning-office','infrastructure-office','district-hall','project-council','apartment-tower','manor','sports-institute','research-institute','training-hall'].includes(b.model)?b.model:landmark?architecture({...source,id:appearance.seedKey,kind:appearance.kind},d.theme):narrow?(ROWS[d.theme]||'townhouse'):b.model;const era=ERAS[appearance.era],palette=d.style.walls.map(c=>shade(era?mix(c,era.wall,era.mix):c,k)),roof=era&&era.roof?mix(d.style.roof,era.roof,.45):d.style.roof;
       if(source.cityTopic==='energy'&&source.kind!=='session'&&!['town-hall','council','registry','city-archive','planning-office','infrastructure-office'].includes(model))model=landmark?'grid-control':['solar-lab','battery-vault'][seed%2];
       // Height falls away from the square: the centre is the dense, important core.
       let h=10+b.floors*8+Math.max(0,1-Math.hypot(f.cx,f.cy)/CORE_RADIUS)*CORE_LIFT;if(landmark)h+=20;if(model==='data-tower'||model==='headquarters')h+=20;
@@ -127,7 +129,7 @@
       if(model==='grand-library')h=72;
       if(['solar-lab','grid-control','battery-vault'].includes(model))h=48;
       if(['manor','sports-institute','research-institute'].includes(model))h=38+(source.cityImportance||2)*4;
-      nodes.push({...source,...orient(f.cx,f.cy,f.fw,f.fd,f.angle,S),physicalId:b.physicalId||source.stableId||source.id,unit:b.unit,h,color:palette[seed%palette.length],roof:d.style.roof,accent:d.color,theme:d.theme,model,seed,lifecycle:b.lifecycle,walk:[pt(b.door),pt(b.gate)]});
+      nodes.push({...source,...orient(f.cx,f.cy,f.fw,f.fd,f.angle,S),physicalId:b.physicalId||source.stableId||source.id,unit:b.unit,h,color:palette[seed%palette.length],roof,era:appearance.era,accent:d.color,theme:d.theme,model,seed,lifecycle:b.lifecycle,constructionProgress:b.constructionProgress,walk:[pt(b.door),pt(b.gate)]});
     }
     const groups=new Map();for(const n of nodes){if(!groups.has(n.physicalId))groups.set(n.physicalId,[]);groups.get(n.physicalId).push(n);}
     const houses=[];for(const members of groups.values()){const chosen=members.find(n=>n.cityRole==='knowledge-library'&&n.available!==false)||members.find(n=>n.available!==false&&n.lifecycle==='open')||members.find(n=>n.available!==false)||members[0];for(const n of members)n.members=members.map(m=>m.id);houses.push({...chosen,members:chosen.members});}
@@ -166,5 +168,5 @@
     const outline=[{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY}];
     return {districts,nodes:houses,sources:nodes,roads,paths,rivers,scenery,plaza:world.plaza?world.plaza.map(pt):null,terrain:{outline,minX,maxX,minY,maxY},residents:world.residents,vehicles:world.vehicles||[],scale:S};
   }
-  const api={plan,fromWorld,spiral,inside,distance};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CityPlan=api;
+  const api={plan,fromWorld,spiral,inside,distance,ERAS};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.CityPlan=api;
 })(typeof window!=='undefined'?window:globalThis);

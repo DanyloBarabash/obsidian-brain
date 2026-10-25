@@ -37,18 +37,24 @@ const MAX_TRIANGLES_PER_BUILDING=2500,EPS=1e-3,LOT=27;
     assert.equal(model.picks.length,1,'the house can be picked');
     if(!day)assert(model.chunks.get('district:d').glow.positions.length>0,'windows glow at night');
   }
+  const early=CityMesh.build({...empty,nodes:[{...house,lifecycle:'construction',constructionProgress:.1}],sources:[]},{day:true,triangulate});
+  const late=CityMesh.build({...empty,nodes:[{...house,lifecycle:'construction',constructionProgress:.9}],sources:[]},{day:true,triangulate});
+  assert.notDeepEqual(early.chunks.get('district:d').lit.positions,late.chunks.get('district:d').lit.positions,'construction geometry rises with persisted progress');
 
   // Every model and service function builds finite geometry by day and night, whichever side its door is on.
   const MODELS=['grand-library','town-hall','solar-lab','grid-control','battery-vault','college','apartment-tower','manor','sports-institute','research-institute','training-hall','district-hall','council','project-council','registry','cottage','timber-house','townhouse','merchant-house','clock-house','atelier','maker-house','greenhouse','observatory','laboratory','library-wing','archive','city-archive','theatre','workshop','headquarters','data-tower','office','terrace'];
   const SERVICES=['stadium','campus','solar-centre','swimming-pool','football-centre','velodrome','medical-centre','concert-hall','town-hall','library','market','arts-centre','innovation-centre','media-centre','clinic','research-lab','tribology-lab','sports-lab','energy-lab','article-market'];
   const doors=[{x:115,y:40},{x:140,y:60},{x:115,y:80},{x:90,y:60}];
   const nodes=MODELS.map((model,i)=>({...house,id:'m'+i,model,h:model==='town-hall'?135:60,rot:i%3?.3:0,walk:[doors[i%4],doors[i%4]],lifecycle:i===2?'construction':'open'}));
+  // Founding and contemporary eras add facade details to an ordinary house; the middle eras only recolour.
+  const townhouse=era=>check(CityMesh.build({...empty,nodes:[{...nodes[MODELS.indexOf('townhouse')],era}],sources:[]},{day:true,triangulate}),'era '+era);
+  assert(townhouse(0)>townhouse(2)&&townhouse(3)>townhouse(2)&&townhouse(1)===townhouse(2),'era facade details');
   const services=SERVICES.map((fn,i)=>({kind:'service',function:fn,x:300,y:300,w:120,d:90,h:40,rot:i%2?.2:0,rcx:360,rcy:345,facility:{id:'s'+i,title:fn,district:'d'}}));
   for(const day of [true,false]){const m=CityMesh.build({...empty,nodes,sources:nodes,scenery:services},{day,triangulate});check(m,'models');assert.equal(m.picks.length,nodes.length+services.length,'every model and service can be picked');
     for(const p of m.picks)assert(p.h>5&&Number.isFinite(p.h),'pick boxes cover the model height');}
 
   // A simulated city through the real plan projection.
-  const {city,world}=JSON.parse(execFileSync('python3',['-c',"import sys,json;sys.path.insert(0,'tests');sys.path.insert(0,'.');from test_simulation import snapshot;from simulation import Simulation;m=Simulation();d=snapshot(60,2);m.sync(d);m.advance(400);print(json.dumps({'city':d,'world':m.presentation()}))"],{cwd:root,maxBuffer:1<<26}).toString());
+  const {city,world}=JSON.parse(execFileSync('python3',['-c',"import sys,json;sys.path.insert(0,'tests');sys.path.insert(0,'.');from test_simulation import snapshot;from simulation import Simulation;from simulation.profile import VALUES;m=Simulation();d=snapshot(60,2);m.sync(d);m.advance(2*VALUES['construction_ticks']+VALUES['building_construction_ticks']);print(json.dumps({'city':d,'world':m.presentation()}))"],{cwd:root,maxBuffer:1<<26}).toString());
   city.districts=[...new Set(city.nodes.map(n=>n.district))].map((id,i)=>({id,title:id,color:'#aabbcc',theme:'workspace',count:1,order:i}));
   const plan=CityPlan.fromWorld(city,world),started=process.hrtime.bigint(),model=CityMesh.build(plan,{day:true,triangulate});
   const ms=Number(process.hrtime.bigint()-started)/1e6,triangles=check(model,'city');

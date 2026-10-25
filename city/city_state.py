@@ -7,6 +7,10 @@ import time
 
 
 SCHEMA_VERSION = 2
+# Architectural eras: scenario parameters sized to a Brain that grows over months, not a building norm.
+ERA_DAYS = 60
+ERA_COUNT = 4
+DAY_SECONDS = 86400
 # Stage-0 evidence only; the server replaces it with the live registry from simulation.rules.
 CAPABILITIES = [
     {"rule": f"BC-{i:02}", "status": "planned"} for i in range(1, 39)
@@ -70,6 +74,8 @@ class CityState:
 
         if self.initializing:
             emit("stateMigrated" if self.migrating else "cityFounded", reason="Preserve existing addresses" if self.migrating else "First vault observation")
+        # The founding date is frozen once, so later or older notes never shift existing eras.
+        state.setdefault("foundedAt", min((node.get("born", now) for node in nodes), default=now))
         occupied = defaultdict(set)
         for district, slot in state["notes"].values():
             occupied[district].add(slot)
@@ -110,6 +116,9 @@ class CityState:
                                 "sourceClass": node["district"], "archived": node.get("archived", False)}
                 emit("sourceImported" if self.initializing else "sourceAdded", key, path=path, title=node["title"], reason="Existing source; construction age unknown" if self.initializing else "New source in Brain")
             record = records[key]
+            if "era" not in record["appearance"]:
+                born = node.get("born", now)
+                record["appearance"].update(bornAt=born, era=max(0, min(ERA_COUNT - 1, int((born - state["foundedAt"]) // (ERA_DAYS * DAY_SECONDS)))))
             if not created:
                 if record["path"] != path:
                     emit("sourceMoved", key, path=path, previousPath=record["path"], title=node["title"])

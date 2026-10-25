@@ -51,6 +51,12 @@ for(const n of rendered.nodes){const poly=outline(n);for(const road of rendered.
 const styled=fromWorld({districts:[{id:'a',theme:'studio',count:75,color:'#c7928d'},{id:'b',theme:'academy',count:75,color:'#88aeb8'}],nodes:world.nodes.map((n,i)=>({...n,district:i%2?'a':'b'}))},world.world);
 for(const id of ['a','b']){const own=styled.nodes.filter(n=>n.district===id);assert(new Set(own.map(n=>n.color)).size<=3);assert.equal(new Set(own.map(n=>n.roof)).size,1);}
 assert.notEqual(styled.nodes.find(n=>n.district==='a').roof,styled.nodes.find(n=>n.district==='b').roof);
+// Eras shift materials within a quarter, one roof per era; the render era keeps the plain quarter look.
+const aged=fromWorld({districts:[{id:'a',theme:'studio',count:800,color:'#c7928d'}],nodes:world.nodes.map((n,i)=>({...n,district:'a',appearance:{seedKey:n.id,kind:n.kind,era:i%4}}))},world.world);
+const plain=fromWorld({districts:[{id:'a',theme:'studio',count:800,color:'#c7928d'}],nodes:world.nodes.map(n=>({...n,district:'a'}))},world.world);
+for(let era=0;era<4;era++)assert.equal(new Set(aged.nodes.filter(n=>n.era===era).map(n=>n.roof)).size,1);
+assert.equal(new Set(aged.nodes.map(n=>n.roof)).size,4);
+assert.equal(aged.nodes.find(n=>n.era===2).roof,plain.nodes[0].roof);
 // Sub-quarters: blocks of two projects in one class get different ground shades and their own labels.
 const projectWorld={...world.world,blocks:world.world.blocks.map((b,i)=>({...b,district:'a',neighbourhood:i%2?'projects/one':'projects/two'}))};
 const split=fromWorld({districts:[{id:'a',theme:'studio',count:400,color:'#c7928d'}],nodes:[...world.nodes.map(n=>({...n,district:'a'})),{id:'projects/one.md',title:'one'}]},projectWorld);
@@ -68,4 +74,6 @@ for(let i=0;i<civicNodes.length;i++)apartments.buildings[civicNodes[i].stableId]
 const shared=fromWorld({districts:[{id:'civic',theme:'civic',count:2,color:'#e1c66e'}],nodes:civicNodes},apartments);
 assert.equal(shared.nodes.length,1);assert.equal(shared.sources.length,2);assert.equal(shared.nodes[0].members.length,2);
 assert.equal(shared.districts[0].physicalCount,1);
+const building=civicNodes[0].stableId,buildingWorld={...civicWorld,buildings:{...civicWorld.buildings,[building]:{...civicWorld.buildings[building],lifecycle:'construction',constructionProgress:.35}}};
+assert.equal(fromWorld({districts:[{id:'civic',theme:'civic',count:2,color:'#e1c66e'}],nodes:civicNodes},buildingWorld).sources[0].constructionProgress,.35);
 console.log('City plan: no overlapping buildings, no streets crossing buildings, connected streets and terrain, stable growth, varied architecture; simulation world renders with bridges, rivers and promenades.');

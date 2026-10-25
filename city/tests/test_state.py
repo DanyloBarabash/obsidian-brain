@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -144,6 +145,21 @@ class StateTests(unittest.TestCase):
         self.assertEqual([e["id"] for e in events], list(range(1, len(events) + 1)))
         self.assertIsNotNone(self.node(result)["history"]["renovatedAt"])
         self.assertEqual(Vault(self.root, self.state_dir).build()["cityState"], result["cityState"])
+
+    def test_eras_are_frozen_at_first_observation(self):
+        day = lambda offset: time.strftime("%Y-%m-%d", time.localtime(time.time() + offset * 86400))
+        self.write("alpha.md", f"---\nid: alpha\ncreated: {day(0)}\n---\n# Alpha")
+        self.assertEqual(self.node(self.vault.build())["appearance"]["era"], 0)
+        founded = self.vault.city_state.layout["foundedAt"]
+        for name, offset in (("beta", 130), ("gamma", -2000), ("delta", 400)):
+            self.write(f"{name}.md", f"---\nid: {name}\ncreated: {day(offset)}\n---\n# {name}")
+        city = self.vault.build()
+        self.assertEqual([self.node(city, f"{n}.md")["appearance"]["era"] for n in ("beta", "gamma", "delta")], [2, 0, 3])
+        self.assertEqual(self.vault.city_state.layout["foundedAt"], founded)
+        self.write("beta.md", f"---\nid: beta\ncreated: {day(-2000)}\n---\n# beta, rewritten")
+        (self.root / "beta.md").rename(self.root / "moved.md")
+        again = Vault(self.root, self.state_dir).build()
+        self.assertEqual(self.node(again, "moved.md")["appearance"], self.node(city, "beta.md")["appearance"])
 
     def test_classification_does_not_relocate(self):
         self.write("projects/p.md", "---\nid: project\ntype: hub\nclass: old-class\n---\n# P")

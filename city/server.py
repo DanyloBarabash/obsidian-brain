@@ -48,6 +48,16 @@ def frontmatter(text):
     return fields, text[match.end():]
 
 
+def created(meta, stat):
+    """Note creation time: frontmatter created / date, else file birth time, else mtime."""
+    for field in ("created", "date"):
+        try:
+            return time.mktime(time.strptime(meta.get(field, "")[:10], "%Y-%m-%d"))
+        except ValueError:
+            pass
+    return getattr(stat, "st_birthtime", stat.st_mtime)
+
+
 def spiral(slot):
     """Give each district a stable position on an expanding square spiral."""
     if slot == 0:
@@ -139,9 +149,11 @@ class Vault:
         with self.lock:
             files = self.files()
             stats = []
+            file_stats = {}
             for file in files:
                 try:
                     stat = file.stat()
+                    file_stats[file.relative_to(self.root).as_posix()] = stat
                     stats.append((file.relative_to(self.root).as_posix(), stat.st_mtime_ns, stat.st_size))
                 except FileNotFoundError:
                     continue
@@ -159,7 +171,7 @@ class Vault:
                 title = meta.get("title") or (heading[1].strip() if heading else Path(path).stem.replace("-", " "))
                 raw[path] = {"id": path, "title": title, "meta": meta, "body": body,
                              "contentRevision": hashlib.sha256(text.encode()).hexdigest(),
-                             "modified": modified / 1e9, "words": len(body.split())}
+                             "modified": modified / 1e9, "born": created(meta, file_stats[path]), "words": len(body.split())}
             hubs = {p: n for p, n in raw.items() if n["meta"].get("type") in ("hub", "org") and p.startswith("projects/")}
             records = self.city_state.layout.get("sources", {})
             profiles = {}
@@ -201,7 +213,7 @@ class Vault:
                 kind = meta.get("type") or ("session" if "/sessions/" in path else "document" if "/documents/" in path else "note")
                 if "templates" in Path(path).parts:
                     kind = "document"
-                nodes.append({k: note[k] for k in ("id", "title", "words", "modified")} | {
+                nodes.append({k: note[k] for k in ("id", "title", "words", "modified", "born")} | {
                     "district": district, "project": project, "kind": kind,
                     **classify(path, meta, project, district, topic, thematic),
                     **({"cityQuarter": profile["quarter"], "citySubject": profile["subject"],

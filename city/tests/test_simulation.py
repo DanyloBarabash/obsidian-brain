@@ -31,7 +31,9 @@ def snapshot(count=16, classes=2):
 
 def commission(model):
     """Finish permitted construction and hold automatic choices for controlled scenarios."""
-    model.advance(3*VALUES["construction_ticks"])
+    model.advance(2*VALUES["construction_ticks"]+VALUES["building_construction_ticks"])
+    ticks_per_day = VALUES["day_seconds"]*1000//VALUES["tick_ms"]
+    model.clock["tick"] += (-model.clock["tick"])%ticks_per_day
     for agent in model.state["residents"].values():
         agent["nextDecision"] = 10**12
 
@@ -187,7 +189,17 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(building["lifecycle"],"connected")
         model.advance(VALUES["construction_ticks"])
         self.assertEqual(building["lifecycle"],"construction")
-        model.advance(VALUES["construction_ticks"])
+        self.assertEqual(building["nextStage"]-model.clock["tick"],VALUES["building_construction_ticks"])
+        self.assertEqual((2*VALUES["construction_ticks"]+VALUES["building_construction_ticks"])*VALUES["tick_ms"],5*60*1000)
+        self.assertEqual(model.static_presentation()["buildings"][key]["constructionProgress"],0)
+        revision = model.static_revision()
+        model.advance(VALUES["building_construction_ticks"]//2)
+        self.assertEqual(building["lifecycle"],"construction")
+        self.assertEqual(model.static_presentation()["buildings"][key]["constructionProgress"],.5)
+        self.assertNotEqual(model.static_revision(),revision)
+        model.advance(VALUES["building_construction_ticks"]-VALUES["building_construction_ticks"]//2-1)
+        self.assertEqual(building["lifecycle"],"construction")
+        model.advance(1)
         self.assertEqual(building["lifecycle"],"open")
         self.assertEqual(building["builtAt"],model.clock["tick"])
         self.assertNotEqual(building["firstSeen"],data["nodes"][0]["modified"])

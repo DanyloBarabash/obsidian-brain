@@ -65,10 +65,12 @@ class Preparation:
     def _advance(self, snapshot, now):
         """Sync sources and advance logical time by bounded elapsed milliseconds; caller holds the lock."""
         self._load()
-        changed = self.model.sync(snapshot)
         now = time.monotonic() if now is None else now
         if self.clock is not None:
             self.model.advance_elapsed(min(MAX_CATCH_UP_MS, int((now-self.clock)*1000)))
+        # Closed-window time belongs only to the city that already existed. A newly
+        # discovered file must begin at reservation when this live view opens.
+        changed = self.model.sync(snapshot)
         self.clock = now
         if changed or now-self.saved > SAVE_INTERVAL_SECONDS:
             self.model.save(self.path)

@@ -15,6 +15,7 @@ from server import Vault, handler_for
 from simulation import Simulation
 from simulation import migrations
 from simulation.engine import LAYOUT_VERSION
+from simulation.profile import VALUES
 from simulation.rules import RULES, fingerprint, readiness
 
 
@@ -63,6 +64,25 @@ class PreparationTests(unittest.TestCase):
             capped = vault.preparation.live(vault.build(),now=3600)
             self.assertEqual(capped["tick"]-second["tick"],10000//second["tickMs"])
             self.assertEqual(original_files,{p.name:p.read_bytes() for p in root.iterdir()})
+
+    def test_new_file_starts_construction_when_the_city_next_opens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)/"vault"
+            root.mkdir()
+            (root/"a.md").write_text("---\nid: real-a\n---\n# A\n")
+            vault = Vault(root,Path(directory)/"state")
+            vault.preparation.live(vault.build(),now=0)
+            vault.preparation.model.advance(2*VALUES["construction_ticks"]+VALUES["building_construction_ticks"])
+            (root/"b.md").write_text("---\nid: real-b\n---\n# B\n")
+            snapshot = vault.build()
+            key = next(node["stableId"] for node in snapshot["nodes"] if node["id"] == "b.md")
+            self.assertNotIn(key,vault.preparation.model.state["sources"])
+            vault.preparation.live(snapshot,now=3600)
+            building = vault.preparation.model.state["buildings"][key]
+            self.assertEqual(building["lifecycle"],"reserved")
+            self.assertEqual(building["firstSeen"],vault.preparation.model.clock["tick"])
+            self.assertEqual(building["nextStage"],building["firstSeen"]+VALUES["construction_ticks"])
+            self.assertTrue(vault.preparation.model.inspect(key)["uri"])
 
     def test_split_save_migration_keeps_city_and_explicit_rebuild(self):
         with tempfile.TemporaryDirectory() as directory:

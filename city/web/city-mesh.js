@@ -149,6 +149,9 @@
     P.line([[du,d+1,1],[du,d+1,14],[du+dw,d+1,14],[du+dw,d+1,1]],trim,.7);
     if(w>22&&n.model!=='college'){P.box(w*.12,d+1,Math.min(8,w*.23),2.4,2.6,P.col('#9b7860'),undefined,5);for(let k=0;k<3;k++)P.box(w*.14+k*2,d+1.6,1.4,1.2,1.4,P.col(k%2?'#c7b078':'#8caa68'),undefined,7.6);}
     P.pole(w-.8,d+.8,2,h-2,P.tint(n.roof||n.color,.72),.8);
+    // Era details: stone quoins in the founding era, glass bands in the contemporary one.
+    if(n.era===0)for(const u of [-.4,w-1.4])P.box(u,d-.4,1.8,1.2,h-3,stone);
+    if(n.era===3)for(let z=14;z<h-6;z+=13)P.box(.5,d,w-1,.8,3.2,P.col(day?'#5f8790':'#e7c98c'),undefined,z);
     if(['manor','town-hall','registry','council','project-council'].includes(n.model))for(const u of [1,w-2])P.box(u,d+.3,1.8,1.5,h-4,stone);
     if(['apartment-tower','laboratory','data-tower','research-institute'].includes(n.model)){P.box(w*.13,d*.15,w*.25,d*.22,4,P.col('#a3aea7'),undefined,h+1);for(let k=0;k<3;k++)P.stick([w*.16,d*(.18+k*.05),h+5.2],[w*.35,d*(.18+k*.05),h+5.2],P.col('#687c79'),.4);}
     if(['town-hall','district-hall','clock-house'].includes(n.model)){const z=h+(n.model==='clock-house'?23:20);P.frontDisc(w*.5,z,4.1,P.col(day?'#f7eed4':'#eddaa6'),!day,d*.7+.6);}
@@ -160,8 +163,8 @@
     // Construction stages: a staked plot, then scaffolding, before the finished house opens.
     if(n.lifecycle==='reserved'||n.lifecycle==='connected'||n.lifecycle==='construction'){
       P.quad(-4,-4,w+8,d+8,.12,P.col(day?'#c9bf9f':'#4d5546'));P.line([[-4,-4,.3],[w+4,-4,.3],[w+4,d+4,.3],[-4,d+4,.3],[-4,-4,.3]],P.col(day?'#8c8266':'#a39a7c'),.5);
-      if(n.lifecycle==='construction'){h*=.45;P.box(0,0,w,d,h,P.col('#b9b2a2'));for(const [u,v] of [[0,0],[w,0],[0,d],[w,d]])P.pole(u,v,0,h+10,P.col('#8a7a5c'),.9);
-        for(const z of [h*.5,h+8])P.line([[0,d+.5,z],[w,d+.5,z],[w+.5,0,z]],P.col('#8a7a5c'),.7);P.pole(w*.8,d*.3,h,h+28,P.col('#c99d55'),1.2);P.stick([w*.8,d*.3,h+28],[w*.8-18,d*.3,h+28],P.col('#c99d55'),1);}
+      if(n.lifecycle==='construction'){const target=h,progress=Math.max(.03,Math.min(.98,n.constructionProgress??.45));h=Math.max(2,target*progress);P.box(0,0,w,d,h,P.col('#b9b2a2'));for(const [u,v] of [[0,0],[w,0],[0,d],[w,d]])P.pole(u,v,0,target+10,P.col('#8a7a5c'),.9);
+        for(const z of [Math.max(2,h*.5),Math.min(target+8,h+8)])P.line([[0,d+.5,z],[w,d+.5,z],[w+.5,0,z]],P.col('#8a7a5c'),.7);P.pole(w*.8,d*.3,0,target+28,P.col('#c99d55'),1.2);P.stick([w*.8,d*.3,target+28],[w*.8-18,d*.3,target+28],P.col('#c99d55'),1);}
       else for(const [u,v] of [[0,0],[w,0],[0,d],[w,d]])P.pole(u,v,0,6,P.col('#8a7a5c'),.9);
       return P.top;
     }

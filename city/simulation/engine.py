@@ -173,7 +173,7 @@ class Simulation:
                     "functions":["home",function],"floors":self._floors(source),"maxFloors":VALUES["max_floors"],
                     "family":family,"model":models[stable_hash(key+function+str(self.day()//VALUES["era_days"]))%len(models)],"era":self.day()//VALUES["era_days"],
                     "serviceLoad":requested_load,
-                    "lifecycle":"reserved","nextStage":self.clock["tick"]+VALUES["construction_ticks"],
+                    "lifecycle":"reserved","stageStarted":self.clock["tick"],"nextStage":self.clock["tick"]+VALUES["construction_ticks"],
                     "firstSeen":self.clock["tick"],"builtAt":None,"materialInstalledAt":self.clock["tick"],"renovatedAt":None,
                     "uri":source["uri"],"reason":"New available Brain source; finite development credit and serviced parcel"}
                 if source.get("cityRole") in ("town-hall", "council", "registry", "city-archive", "planning-office", "infrastructure-office", "district-hall", "project-council"):
@@ -269,13 +269,25 @@ class Simulation:
                 continue
             building.pop("waitingReason",None)
             lifecycle = {"reserved":"connected","connected":"construction","construction":"open"}[building["lifecycle"]]
-            building.update(lifecycle=lifecycle,nextStage=self.clock["tick"]+VALUES["construction_ticks"])
+            duration = VALUES["building_construction_ticks"] if lifecycle == "construction" else VALUES["construction_ticks"]
+            building.update(lifecycle=lifecycle,stageStarted=self.clock["tick"],nextStage=self.clock["tick"]+duration)
             event = {"connected":"buildingConnected","construction":"constructionStarted","open":"buildingOpened"}[lifecycle]
             self.emit(event,source=key,parcel=parcel["id"])
             if lifecycle == "open":
                 building["builtAt"] = self.clock["tick"]
                 parcel["state"] = "used"
                 self._pending.discard(key)
+
+    def _construction_progress(self, building):
+        """Return a stable render step for a building under construction."""
+        if building["lifecycle"] != "construction":
+            return None
+        duration = VALUES["building_construction_ticks"]
+        started = building.get("stageStarted",building["nextStage"]-duration)
+        total = max(1,building["nextStage"]-started)
+        progress = max(0,min(1,(self.clock["tick"]-started)/total))
+        steps = VALUES["construction_progress_steps"]
+        return math.floor(progress*steps)/steps
 
     def advance(self, ticks=1):
         """Advance a fixed number of ticks; pause and reduced motion freeze all processes."""
@@ -370,7 +382,7 @@ class Simulation:
         world = self.world
         parts = [self.state['layoutVersion'], world.street.state["revision"], world.walk.state["revision"], len(world.state["blocks"]), len(world.state["parcels"]),
                  len(world.state["services"]), len(world.state["vegetation"]), self.day(),
-                 [(key, b["lifecycle"], b["available"], b["floors"], b["model"]) for key, b in sorted(self.state["buildings"].items())],
+                 [(key, b["lifecycle"], self._construction_progress(b), b["available"], b["floors"], b["model"]) for key, b in sorted(self.state["buildings"].items())],
                  [(key, s["function"], s.get("title"), s.get("footprint") and s["footprint"]["polygon"]) for key, s in sorted(world.state["services"].items())]]
         return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:16]
 
@@ -425,7 +437,8 @@ class Simulation:
             parcel = world.state["parcels"][building["parcel"]]
             buildings[key] = {"footprint": building["footprint"], "floors": building["floors"], "model": building["model"],
                               "physicalId":building.get("physicalId",building["id"]),"unit":building.get("unit"),
-                              "family": building["family"], "lifecycle": building["lifecycle"], "block": parcel["block"],
+                              "family": building["family"], "lifecycle": building["lifecycle"],
+                              "constructionProgress": self._construction_progress(building), "block": parcel["block"],
                               "door": point(entrance), "gate": point(gate)}
         return {"units": "logical metres",
                 "land": world.state["land"],
