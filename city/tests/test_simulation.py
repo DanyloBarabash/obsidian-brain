@@ -893,6 +893,46 @@ class SimulationTests(unittest.TestCase):
         self.assertGreaterEqual(sum(shares)/len(shares),0.5)
         self.assertEqual(model.audit(),[])
 
+    def test_hundred_notes_of_one_project_grow_in_place(self):
+        model = Simulation()
+        data = snapshot(120,3)
+        model.sync(data)
+        commission(model)
+        homes = deepcopy(model.state["buildings"])
+        trees = deepcopy(model.world.state["vegetation"])
+        parks = [deepcopy(z) for z in model.world.state["protected"] if z["id"].startswith("park:")]
+        for index in range(100):
+            node = deepcopy(data["nodes"][3])
+            node.update(id=f"projects/gamma/{index}.md",stableId=f"gamma-{index}",project="projects/gamma.md",district=CLASSES[1],kind="note")
+            data["nodes"].append(node)
+        model.sync(data)
+        blocks,parcels = model.world.state["blocks"],model.world.state["parcels"]
+        self.assertGreaterEqual(sum(b["neighbourhood"] == "projects/gamma" for b in blocks.values()),2)
+        for key,home in homes.items():
+            self.assertEqual(model.state["buildings"][key]["footprint"],home["footprint"])
+            self.assertEqual(model.state["buildings"][key]["parcel"],home["parcel"])
+            self.assertEqual(model.state["buildings"][key]["entrance"],home["entrance"])
+        for key,tree in trees.items():
+            self.assertEqual(model.world.state["vegetation"][key],tree)
+        for park in parks:
+            self.assertIn(park,model.world.state["protected"])
+            self.assertFalse(any(convex_overlap(park["polygon"],p["footprint"]["polygon"]) for p in parcels.values()))
+        for index in range(100):
+            block = blocks[parcels[model.state["buildings"][f"gamma-{index}"]["parcel"]]["block"]]
+            self.assertEqual(block["district"],CLASSES[1])
+        listed = list(blocks.values())
+        for index,block in enumerate(listed):
+            for other in listed[index+1:]:
+                if block["district"] != other["district"]:
+                    self.assertFalse(any(convex_overlap(parcels[a]["polygon"],parcels[b]["polygon"]) for a in block["parcels"] for b in other["parcels"]))
+        metrics = model.world.street.metrics()
+        self.assertEqual(metrics["deadEnds"],0)
+        self.assertEqual(metrics["connectedNodeRatio"],1.0)
+        self.assertEqual(model.world.street.topology_errors(),[])
+        self.assertEqual(model.world.walk.topology_errors(),[])
+        self.assertEqual(len(model.state["residents"]),220)
+        self.assertEqual(model.audit(),[])
+
     def sized_snapshot(self):
         """Three classes of very different size, with two large projects in the biggest."""
         data = snapshot(300,1)

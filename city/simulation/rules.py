@@ -16,7 +16,7 @@ RULES = [
     (6,"Спільна земля й резерви",[ENGINE+"test_protected_land_and_corridors",ENGINE+"test_all_pedestrian_paths_avoid_building_interiors"]),
     (7,"Світові одиниці",[ENGINE+"test_parameters_are_declared_assumptions",ENGINE+"test_pause_reduced_motion_and_frame_independence"]),
     (8,"Осередки з причиною",[ENGINE+"test_new_centres_have_reasons_and_connected_access"]),
-    (9,"Вибір місця та ріст",[ENGINE+"test_growth_infill_edge_and_stable_geometry",ENGINE+"test_growth_rejects_unserviceable_infill",ENGINE+"test_failed_allocation_is_atomic"]),
+    (9,"Вибір місця та ріст",[ENGINE+"test_growth_infill_edge_and_stable_geometry",ENGINE+"test_growth_rejects_unserviceable_infill",ENGINE+"test_failed_allocation_is_atomic",ENGINE+"test_hundred_notes_of_one_project_grow_in_place"]),
     (10,"Ріст під реальний попит",[ENGINE+"test_hundred_days_no_spontaneous_city_or_punishment"]),
     (11,"Етапи будівництва",[ENGINE+"test_construction_stages_require_services"]),
     (12,"Збережена історія",[ENGINE+"test_construction_stages_require_services",STATE+"test_history_and_idempotence"]),

@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import pickle
 
 from .activities import Activities
 from .economy import Economy
@@ -92,11 +93,11 @@ class Simulation:
         signature,sources,knowledge = self._normalize(snapshot)
         if signature == self.state["snapshotVersion"]:
             return False
-        before = deepcopy(self.state)
+        before = pickle.dumps(self.state,pickle.HIGHEST_PROTOCOL)
         try:
             return self._apply(sources,knowledge,signature)
         except Exception:
-            self.__init__(before)
+            self.__init__(pickle.loads(before))
             raise
 
     def _normalize(self, snapshot):
