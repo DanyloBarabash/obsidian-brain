@@ -171,6 +171,21 @@ for cmd in new_commands:
         brain_block['hooks'].append({'type': 'command', 'command': cmd})
         added += 1
 
+# Before each prompt, follow the session's folder to its Brain project.
+switch_cmd = f"bash {shlex.quote(claude_dir + '/scripts/auto-switch-vault.sh')}"
+existing['hooks'].setdefault('UserPromptSubmit', [])
+switch_block = next(
+    (b for b in existing['hooks']['UserPromptSubmit']
+     if isinstance(b, dict) and b.get('matcher') == '' and 'hooks' in b),
+    None
+)
+if switch_block is None:
+    switch_block = {'matcher': '', 'hooks': []}
+    existing['hooks']['UserPromptSubmit'].append(switch_block)
+if switch_cmd not in {h.get('command') for h in switch_block['hooks']}:
+    switch_block['hooks'].append({'type': 'command', 'command': switch_cmd})
+    added += 1
+
 with open(settings_path, 'w') as f:
     json.dump(existing, f, indent=2)
     f.write('\n')

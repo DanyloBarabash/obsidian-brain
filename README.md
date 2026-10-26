@@ -33,7 +33,7 @@ flowchart LR
 |---|---|---|
 | Claude commands | `.claude/commands/*.md` | `/memory`, `/save-session`, `/recall`, … |
 | Claude skill | `.claude/skills/retro/` | Periodic retrospective over recent sessions |
-| Hooks | `.claude/scripts/*.sh` | Stop hooks: unprocessed originals, unsaved session reminder |
+| Hooks | `.claude/scripts/*.sh` | Stop hooks: unprocessed originals, unsaved session reminder; prompt hook: switch the active project by folder |
 | Codex skill | `codex/skills/obsidian-brain/` | Same vault rules for Codex |
 | Codex rules | `codex/AGENTS.md` | Section appended to `~/.codex/AGENTS.md` |
 | Vault config | `~/.claude/settings.json` → `vaults` | Single source of `root`, `active`, `aliases` for all agents |
@@ -156,8 +156,11 @@ source: "<file or URL>"    # documents only
 |---|---|---|
 | Stop | `check-originals.sh` | A file in `documents/originals/` has no processed note |
 | Stop | `remind-save-session.sh` | The active project has no session saved today |
+| UserPromptSubmit | `auto-switch-vault.sh` | The session's folder is listed in a project hub's `workdirs`; that project becomes active |
 
-Both read `~/.claude/settings.json`; a project `.claude/settings.json` overrides it only when its `vaults.active` is non-empty. Both need `jq` and exit silently without it.
+The Stop hooks read `~/.claude/settings.json`; a project `.claude/settings.json` overrides it only when its `vaults.active` is non-empty. Both need `jq` and exit silently without it.
+
+`auto-switch-vault.sh` needs `python3`. It reads `workdirs: ["~/code/app", …]` from hub frontmatter, picks the deepest folder that contains the session's working directory and writes `vaults.active`; an unmapped folder or a project with its own `vaults.root` changes nothing. `/switch-vault` still works there. Two sessions in different projects take turns: each prompt sets its own project first.
 
 ---
 

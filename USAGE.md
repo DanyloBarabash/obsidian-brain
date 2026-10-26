@@ -220,6 +220,8 @@ Switch the active project workspace for this session.
 Updates `vaults.active` in `settings.json`.
 After switching, run `/memory` to load the new project's context.
 
+Usually you do not need it: list a project's code folders in its hub as `workdirs: ["~/code/app"]`, and the prompt hook makes that project active whenever a session runs inside one of them (the deepest match wins). `/switch-vault` is for folders without a mapping.
+
 ---
 
 ### `/index`
