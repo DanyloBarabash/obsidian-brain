@@ -78,7 +78,8 @@ function renderCard(card,kind){
   const picker=shelfPicker(book.shelf,name=>shelveBook(book,name===book.shelf?'':name),'Полиця:');
   const actions=document.createElement('div');actions.className='library-actions';
   if(kind==='saved'){const read=document.createElement('button');read.className='primary';read.textContent='Читати в читальні';read.onclick=()=>CityReader.open(book.node);actions.append(read);}
-  else{const take=document.createElement('button');take.className='primary';take.textContent='Взяти в мозок';
+  else{const read=document.createElement('button');read.className='primary';read.textContent='Читати в читальні';read.onclick=()=>CityReader.open({id:`market/${book.key}`,title:book.title,article:book.key});actions.append(read);
+    const take=document.createElement('button');take.textContent='Взяти в мозок';
     take.onclick=async()=>{take.disabled=true;take.textContent='Несемо в мозок…';try{const r=await libraryPost('/api/library/take',{id:book.key});toast(`Узято в мозок${r.shelf?` · полиця «${r.shelf}»`:''}`);librarySelected=null;await loadLibrary();renderLibrary();}catch(error){take.disabled=false;take.textContent='Взяти в мозок';toast(`Не вдалося: ${error.message}`);}};actions.append(take);}
   if(book.url){const source=document.createElement('a');source.className='text-button';source.href=book.url;source.target='_blank';source.rel='noopener noreferrer';source.textContent='Першоджерело ↗';actions.append(source);}
   card.append(kicker,title,meta,about,picker,actions);

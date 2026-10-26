@@ -287,6 +287,21 @@ class Reader:
             chosen.sort(key=lambda v: -v.get("rated", 0))
             return {"items": [{k: v for k, v in item.items() if k not in ("body", "vec")} for item in chosen[:LIST_LIMIT]]}
 
+    def article(self, item_id):
+        """Full text of one listed article for reading in place; fetched once and kept in reader state."""
+        with self.lock:
+            item = self.state["items"].get(item_id)
+            if item is None:
+                raise KeyError(item_id)
+            snapshot = dict(item)
+        text = snapshot.get("body") or ""
+        if not snapshot.get("fullText"):
+            text = max(text, feeds.fetch_full(snapshot["url"], self.download), key=len)
+            with self.lock:
+                self.state["items"][item_id].update(body=text, fullText=True)
+                self._save()
+        return {**{k: snapshot.get(k) for k in ("id", "url", "title", "sourceLabel", "author", "about", "summary")}, "text": text}
+
     def act(self, item_id, action):
         """Apply feedback; `save` also writes the article into the vault."""
         if action not in ACTIONS:

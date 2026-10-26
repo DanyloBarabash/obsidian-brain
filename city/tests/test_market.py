@@ -136,6 +136,18 @@ class MarketTests(unittest.TestCase):
             self.post("/api/library/shelve", {"id": bread["id"], "shelf": "bad: name"})
         self.assertEqual(error.exception.code, 400)
 
+    def test_articles_read_in_place_without_writing_brain(self):
+        with urlopen(self.base + "/api/market") as response:
+            pose = next(i for i in json.load(response)["stalls"][0]["items"] if i["title"].startswith("Pose"))
+        with urlopen(self.base + "/api/market/article?id=" + pose["id"]) as response:
+            article = json.load(response)
+        self.assertEqual((article["title"], article["url"]), (pose["title"], pose["url"]))
+        self.assertIn("Full pose article.", article["text"])
+        self.assertFalse((self.brain / "_global").exists(), "reading in place writes nothing into Brain")
+        with self.assertRaises(HTTPError) as error:
+            urlopen(self.base + "/api/market/article?id=missing")
+        self.assertEqual(error.exception.code, 400)
+
     def test_writes_need_same_origin_json_and_known_actions(self):
         for body, origin in (({"id": "x", "action": "save"}, False), ({"url": "https://a.example"}, False)):
             with self.assertRaises(HTTPError) as error:

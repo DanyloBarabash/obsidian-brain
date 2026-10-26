@@ -153,6 +153,25 @@ class ProjectDistrictTests(unittest.TestCase):
             self.assertEqual(model.audit(),[])
             self.assertTrue(audit_clusters(model)["passed"])
 
+    def test_enclosed_class_grows_on_free_land_of_its_own_sector(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/sports.md","Спорт","city_topic: sports\n")
+            self.hub(root,"projects/tech.md","Технології","city_topic: technology\n")
+            model=Simulation();model.sync(Vault(root,Path(directory)/"state").build())
+            source=next(s for s in model.state["sources"].values() if s["class"]=="sports")
+            source={**source,"sourceClass":"sports","district":"sports","stableId":source["id"],"quarter":"","neighbourhoodSize":0}
+            world=World(deepcopy(model.world.state),lambda *a,**kw:None)
+            # No free cell touches a sports block, as when other districts surround the class.
+            world.cluster_neighbours=lambda cell:set()
+            passes=[];strict=world._new_block
+            world._new_block=lambda src,tick,connected=True:(passes.append(connected),strict(src,tick,connected))[1]
+            block=world._new_block(source,0)
+            self.assertEqual(passes,[True,False],"the strict pass finds nothing, the sector pass places the quarter")
+            self.assertEqual(block["district"],"sports")
+            a,b=world.cell_ticks(*block["cell"])
+            self.assertEqual(wedge_offset((a+b)/2,world.state["wedges"]["sports"]),0,"the quarter stays inside its own sector")
+
     def test_article_market_opens_on_the_civic_square(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)/"vault";root.mkdir()

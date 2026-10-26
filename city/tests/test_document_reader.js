@@ -44,5 +44,11 @@ for(const file of ['vendor/marked.min.js','vendor/purify.min.js','document-reade
   status=200;$('document-reader').dispatchEvent(new w.KeyboardEvent('keydown',{key:'s',metaKey:true}));await tick();await tick();
   assert.deepEqual(posted,{path:a.id,content:'# New page\n\nEdited text',revision:'r1'});assert($('reader-editor').hidden);assert(body.textContent.includes('Edited text'));assert.equal(saved,a.id);
   $('reader-edit').click();$('reader-editor').value='discard me';$('reader-edit').click();assert($('reader-editor').hidden);assert(body.textContent.includes('Edited text'));
-  $('reader-close').click();dom.window.close();console.log('Document reader: tables, callouts, checklists, wiki navigation, code, images, diagrams, sanitization, source view, history, stale-response protection and editing with conflict and unsaved-change guards pass.');
+  $('reader-close').click();
+  // A liked market article reads in place from the reader and cannot be edited.
+  let asked='';w.fetch=async url=>{asked=url;return {ok:true,json:async()=>({id:'x1',title:'Ринкова стаття',url:'https://example.org/x',sourceLabel:'Blog',about:'Короткий опис.',text:'Повний текст статті.'})};};
+  w.CityReader.open({id:'market/x1',title:'Ринкова стаття',article:'x1'});await tick();await tick();
+  assert.equal(asked,'/api/market/article?id=x1');assert.equal($('reader-kicker').textContent,'ВПОДОБАНЕ НА РИНКУ');
+  assert(body.textContent.includes('Короткий опис.')&&body.textContent.includes('Повний текст статті.'));assert($('reader-edit').disabled,'a market article is not a Brain file');
+  $('reader-close').click();dom.window.close();console.log('Document reader: tables, callouts, checklists, wiki navigation, code, images, diagrams, sanitization, source view, history, stale-response protection and editing with conflict and unsaved-change guards, and market articles pass.');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

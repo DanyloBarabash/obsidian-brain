@@ -115,15 +115,18 @@
     if(push&&current&&dialog.open)history.push({node:current,scroll:$('reader-scroll').scrollTop});
     current=node;const version=++request;
     if(!dialog.open){returnFocus=document.activeElement;dialog.showModal();}
-    $('reader-back').disabled=!history.length;$('reader-source').disabled=true;$('reader-edit').disabled=true;$('reader-title').textContent=node.title;$('reader-kicker').textContent=node.knowledgeScope==='library'?'ЗАГАЛЬНА БІБЛІОТЕКА':'ДОКУМЕНТ ІЗ МІСТА';
+    $('reader-back').disabled=!history.length;$('reader-source').disabled=true;$('reader-edit').disabled=true;$('reader-title').textContent=node.title;$('reader-kicker').textContent=node.article?'ВПОДОБАНЕ НА РИНКУ':node.knowledgeScope==='library'?'ЗАГАЛЬНА БІБЛІОТЕКА':'ДОКУМЕНТ ІЗ МІСТА';
     $('reader-meta').textContent=node.id;raw='';$('reader-raw').hidden=true;$('reader-body').hidden=false;$('reader-source').setAttribute('aria-pressed','false');$('reader-source').textContent='Markdown';$('reader-outline').hidden=false;
     $('reader-body').replaceChildren();$('reader-toc').replaceChildren();$('reader-scroll').scrollTop=0;$('reader-progress-bar').style.width='0%';message('Відкриваємо сторінки…');
-    try{const response=await fetch('/api/note?path='+encodeURIComponent(node.id));if(!response.ok)throw Error();const data=await response.json();if(version!==request||!dialog.open)return;
-      raw=data.content;revision=data.revision;$('reader-source').disabled=false;$('reader-edit').disabled=false;const words=clean(raw).split(/\s+/).filter(Boolean).length;
+    try{const response=await fetch(node.article?'/api/market/article?id='+encodeURIComponent(node.article):'/api/note?path='+encodeURIComponent(node.id));if(!response.ok)throw Error();const data=await response.json();if(version!==request||!dialog.open)return;
+      if(data.offline)throw Error();
+      // A liked market article is read in place from the reader and is not a Brain file, so it cannot be edited.
+      raw=node.article?articleMarkdown(data):data.content;revision=data.revision||'';$('reader-source').disabled=false;$('reader-edit').disabled=!!node.article;const words=clean(raw).split(/\s+/).filter(Boolean).length;
       $('reader-meta').textContent=`${Math.max(1,Math.ceil(words/200))} хв читання · ${words.toLocaleString('uk')} слів · ${node.id}`;
       message('');render($('reader-body'),raw,node);outline();if(anchor)jump(anchor);progress();
     }catch{if(version===request)message('Не вдалося прочитати документ. Закрий і відкрий його знову.');}
   }
+  function articleMarkdown(a){return [`# ${a.title}`,'',`> ${[a.sourceLabel,a.author].filter(Boolean).join(' · ')}`,`> ${a.url}`,'',...(a.about?['## Опис','',a.about,'']:[]),'## Текст','',(a.text||a.summary||'Текст недоступний; відкрий першоджерело.').trim(),''].join('\n');}
   function toggleSource(){const source=$('reader-raw').hidden;$('reader-raw').textContent=raw;$('reader-raw').hidden=!source;$('reader-body').hidden=source;$('reader-outline').hidden=source;$('reader-source').setAttribute('aria-pressed',String(source));$('reader-source').textContent=source?'Оформлений вигляд':'Markdown';progress();}
   // Unsaved edits keep the document open; navigating away would silently drop them.
   function blocked(){if(!editing||$('reader-editor').value===raw)return false;message('Є незбережені зміни — збережи їх або скасуй редагування.');return true;}

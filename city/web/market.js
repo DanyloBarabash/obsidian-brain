@@ -8,6 +8,8 @@ async function marketPost(path,body){const r=await fetch(path,{method:'POST',hea
 function ware(item){
   const row=document.createElement('div');row.className='ware';
   const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=item.title;
+  // Articles are read in the city's reader; the first-source link stays in the reader's header.
+  link.onclick=e=>{if(typeof CityReader==='undefined')return;e.preventDefault();CityReader.open({id:`market/${item.id}`,title:item.title,article:item.id});};
   const meta=document.createElement('small');
   meta.textContent=[item.sourceLabel,marketAgo(item.published),item.score!=null?`${Math.round(item.score*100)}%`:'',item.explore?'розвідка':'',item.why?.length?`через: ${item.why.join(', ')}`:''].filter(Boolean).join(' · ');
   const about=document.createElement('p');about.className='about';about.textContent=item.about||item.summary||'';

@@ -2,6 +2,7 @@
 
 import json
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 READER_URL = "http://127.0.0.1:8766"
@@ -58,6 +59,10 @@ class Market:
         """Liked articles not yet taken into Brain: the library's reading shelf."""
         items = self.call("/api/items?status=like")["items"]
         return {"items": [{k: item.get(k) for k in LIKED_FIELDS} for item in items if item.get("status") == "like"]}
+
+    def article(self, item_id):
+        """One liked article's text for the city reader; nothing is written into Brain."""
+        return self.call(f"/api/article?id={quote(str(item_id))}")
 
     def act(self, body):
         if body.get("action") not in ACTIONS:

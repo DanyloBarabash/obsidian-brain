@@ -390,6 +390,12 @@ def handler_for(vault, market=None):
                     except ReaderOffline:
                         payload = {"offline": True, "items": []}
                     self.respond(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                elif route.path == "/api/market/article":
+                    try:
+                        payload = market.article(parse_qs(route.query).get("id", [""])[0])
+                    except ReaderOffline:
+                        payload = {"offline": True}
+                    self.respond(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 elif route.path == "/api/library":
                     try:
                         liked, offline = market.liked()["items"], False

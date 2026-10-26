@@ -53,6 +53,8 @@ def handler_for(reader):
                     self.json(feed)
                 elif route.path == "/api/items":
                     self.json(reader.listed(parse_qs(route.query).get("status", ["like"])[0]))
+                elif route.path == "/api/article":
+                    self.json(reader.article(parse_qs(route.query).get("id", [""])[0]))
                 elif route.path == "/api/interests":
                     self.json(reader.interests())
                 elif route.path == "/api/sources":
@@ -64,6 +66,8 @@ def handler_for(reader):
                     self.respond((WEB / name).read_bytes(), MIME[name.rsplit(".", 1)[1]] + "; charset=utf-8")
                 else:
                     self.send_error(404)
+            except KeyError:
+                self.send_error(404)
             except ValueError:
                 self.send_error(400)
 

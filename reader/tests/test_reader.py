@@ -201,6 +201,20 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(self.reader.feed()["new"], 2)
         self.assertEqual([i["id"] for i in self.reader.listed("save")["items"]], [target["id"]])
 
+    def test_article_text_is_fetched_once_and_never_written_to_the_vault(self):
+        target = next(i for i in self.reader.feed()["items"] if i["kind"] == "medium")
+        calls = []
+        self.reader.download = lambda url: calls.append(url) or download(url)
+        article = self.reader.article(target["id"])
+        self.assertIn("Full article text.", article["text"])
+        self.assertEqual(article["title"], target["title"])
+        fetched = len(calls)
+        self.assertEqual(self.reader.article(target["id"])["text"], article["text"])
+        self.assertEqual(len(calls), fetched, "the second read uses the kept text")
+        self.assertFalse((self.vault / "_global").exists())
+        with self.assertRaises(KeyError):
+            self.reader.article("missing")
+
     def test_state_survives_restart_and_stays_outside_vault(self):
         target = self.reader.feed()["items"][0]
         self.reader.act(target["id"], "dislike")

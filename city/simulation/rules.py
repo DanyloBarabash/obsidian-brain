@@ -80,6 +80,10 @@ RULES = [
     (70,"Теми незалежно від власника",["test_housing.HousingTests.test_topics_inherit_but_project_ownership_is_retained"]),
     (71,"Важливість і тематичні служби",["test_housing.HousingTests.test_thematic_facilities_have_land_access_and_real_visits"]),
     (72,"Проєктні прибудови й ріст навколо комплексу",["test_project_districts.ProjectDistrictTests.test_project_building_is_a_bay_of_its_cluster_complex","test_project_districts.ProjectDistrictTests.test_technology_complex_migrates_project_estates_without_moving_homes","test_project_districts.ProjectDistrictTests.test_growth_fills_the_nearest_feasible_complex_band_before_cheaper_land"]),
+    (73,"Ринок статей на центральній площі",["test_project_districts.ProjectDistrictTests.test_article_market_opens_on_the_civic_square"]),
+    (74,"Автобусів стільки, скільки потребує район",["test_simulation.SimulationTests.test_transit_runs_one_vehicle_per_forty_district_residents"]),
+    (75,"Бібліотека знань на центральній площі",["test_project_districts.ProjectDistrictTests.test_knowledge_library_reads_on_the_civic_square"]),
+    (76,"Затиснутий клас росте у своєму секторі",["test_project_districts.ProjectDistrictTests.test_enclosed_class_grows_on_free_land_of_its_own_sector"]),
 ]
 
 
@@ -87,7 +91,7 @@ def fingerprint():
     """Invalidate evidence whenever engine, integration or relevant tests change."""
     root = Path(__file__).resolve().parents[1]
     files = sorted(list((root/"simulation").glob("*.py"))+list((root/"tests").glob("test*.py"))+
-                   [root/"server.py",root/"city_state.py",root/"preparation.py",root/"classification.py",root/"market.py",root/"verify_simulation.py"])
+                   [root/"server.py",root/"city_state.py",root/"preparation.py",root/"classification.py",root/"market.py",root/"library.py",root/"verify_simulation.py"])
     digest = hashlib.sha256()
     for path in files:
         digest.update(path.relative_to(root).as_posix().encode())

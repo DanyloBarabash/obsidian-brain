@@ -49,6 +49,7 @@ const tab=name=>d.querySelector(`.library-tabs [data-tab="${name}"]`),shelf=name
   assert.deepEqual(posts.at(-1),['/api/library/shelve',{id:'x1',shelf:'Порожня'}]);
   const form=$('library-card').querySelector('.shelf-picker form');form.querySelector('input').value='  Нова  ';form.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();
   assert.deepEqual(posts.at(-1),['/api/library/shelve',{id:'x1',shelf:'Нова'}]);
+  [...$('library-card').querySelectorAll('button')].find(b=>b.textContent==='Читати в читальні').click();assert.deepEqual(read,['market/x1'],'a liked article opens in the city reader');read.length=0;
   [...$('library-card').querySelectorAll('button')].find(b=>b.textContent==='Взяти в мозок').click();await tick();await tick();await tick();
   assert.deepEqual(posts.at(-1),['/api/library/take',{id:'x1'}]);assert(toasts.at(-1).includes('Узято в мозок'));
   tab('saved').click();await tick();await tick();
