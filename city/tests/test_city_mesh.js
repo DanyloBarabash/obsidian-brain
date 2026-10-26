@@ -43,9 +43,11 @@ const MAX_TRIANGLES_PER_BUILDING=2500,EPS=1e-3,LOT=27;
 
   // Every model and service function builds finite geometry by day and night, whichever side its door is on.
   const MODELS=['grand-library','town-hall','solar-lab','grid-control','battery-vault','college','apartment-tower','manor','sports-institute','research-institute','training-hall','district-hall','council','project-council','registry','cottage','timber-house','townhouse','merchant-house','clock-house','atelier','maker-house','greenhouse','observatory','laboratory','library-wing','archive','city-archive','theatre','workshop','headquarters','data-tower','office','terrace'];
-  const SERVICES=['stadium','campus','solar-centre','swimming-pool','football-centre','velodrome','medical-centre','concert-hall','town-hall','library','market','arts-centre','innovation-centre','media-centre','clinic','research-lab','tribology-lab','sports-lab','energy-lab','article-market'];
+  const SERVICES=['stadium','campus','solar-centre','swimming-pool','football-centre','velodrome','medical-centre','concert-hall','town-hall','library','market','arts-centre','innovation-centre','media-centre','clinic','research-lab','tribology-lab','sports-lab','energy-lab','article-market','motion-lab','practice-centre','memory-vault','lab-depot'];
   const doors=[{x:115,y:40},{x:140,y:60},{x:115,y:80},{x:90,y:60}];
   const nodes=MODELS.map((model,i)=>({...house,id:'m'+i,model,h:model==='town-hall'?135:60,rot:i%3?.3:0,walk:[doors[i%4],doors[i%4]],lifecycle:i===2?'construction':'open'}));
+  // A project compound draws its shared forecourt, gallery and sign as finite geometry on either door side.
+  for(const walk of [[{x:300,y:420}],[{x:300,y:270}]])assert(check(CityMesh.build({...empty,nodes:[],sources:[],scenery:[{kind:'compound',x:200,y:280,w:200,d:130,rot:.2,rcx:300,rcy:345,walk,members:3},{kind:'gallery',x:220,y:400,w:160,d:12,rot:.2,rcx:300,rcy:406,walk,accent:'#c9a77c'}]},{day:false,triangulate}),'compound')>60,'compound geometry');
   // Founding and contemporary eras add facade details to an ordinary house; the middle eras only recolour.
   const townhouse=era=>check(CityMesh.build({...empty,nodes:[{...nodes[MODELS.indexOf('townhouse')],era}],sources:[]},{day:true,triangulate}),'era '+era);
   assert(townhouse(0)>townhouse(2)&&townhouse(3)>townhouse(2)&&townhouse(1)===townhouse(2),'era facade details');

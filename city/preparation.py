@@ -54,6 +54,16 @@ class Preparation:
             self.model = None
             self.static_cache = None
 
+    def rebuild_quarter(self, prefix, snapshot):
+        """Explicitly re-lay one project's sub-quarters, keeping a backup of the whole world."""
+        with self.lock:
+            self._load()
+            self._backup(Simulation.read_state(self.path) if self.path.exists() else self.model.state,f"rebuild-quarter-{int(time.time())}")
+            count = self.model.rebuild_quarter(prefix,snapshot)
+            self.model.save(self.path)
+            self.static_cache = None
+            return count
+
     def capabilities(self):
         """Current per-rule status from the latest source-matched verification report."""
         try:

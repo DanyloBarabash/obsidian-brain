@@ -244,6 +244,37 @@ class SimulationTests(unittest.TestCase):
         self.assertFalse(any(e["type"] in TRANSIENT_EVENTS for e in model.state["events"]))
         self.assertEqual(model.audit(),[])
 
+    def test_split_path_keeps_walking_residents_on_their_way(self):
+        model,data = self.make(2,1)
+        commission(model)
+        key = data["nodes"][0]["stableId"]
+        agent = model.state["residents"][key]
+        block = model.world.state["parcels"][model.state["buildings"][key]["parcel"]]["block"]
+        self.assertTrue(model.activities.request(key,f"{block}:park"))
+        walk = model.world.walk
+        for _ in range(2000):
+            model.advance()
+            if agent.get("route") and agent["progress"] > 1 and walk.state["edges"][agent["route"]["edges"][agent["edge"]]]["length"] > agent["progress"]+2:
+                break
+        edge = walk.state["edges"][agent["route"]["edges"][agent["edge"]]]
+        a,b = walk.state["nodes"][edge["a"]],walk.state["nodes"][edge["b"]]
+        start = walk.state["nodes"][agent["node"]]
+        before = model.activities.position(agent)
+        t = (agent["progress"]+1)/edge["length"]
+        if agent["node"] == edge["b"]:
+            a,b = b,a
+        walk.node(start["x"]+(b["x"]-start["x"])*t,start["y"]+(b["y"]-start["y"])*t)
+        self.assertNotIn(agent["route"]["edges"][agent["edge"]],walk.state["edges"])
+        model.activities.repair_routes()
+        after = model.activities.position(agent)
+        self.assertLess(math.hypot(after["x"]-before["x"],after["y"]-before["y"]),1e-6)
+        for _ in range(2000):
+            model.advance()
+            if agent["state"] == "visiting":
+                break
+        self.assertEqual(agent["state"],"visiting")
+        self.assertEqual(model.audit(),[])
+
     def test_capacity_hours_and_fair_queue(self):
         model,data = self.make(3,1)
         commission(model)
@@ -945,6 +976,33 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(len(model.state["residents"]),220)
         self.assertEqual(model.audit(),[])
 
+    def test_rebuild_quarter_splits_sub_projects_and_keeps_the_city(self):
+        model = Simulation()
+        data = snapshot(120,2)
+        for index,node in enumerate(data["nodes"][40:100]):
+            node.update(district=CLASSES[0],cityQuarter="projects/org",kind="hub" if index < 3 else "note",
+                        project=["projects/org.md","projects/org/plans.md","projects/org/vision.md"][min(index,2) if index < 3 else 1+index%2])
+        model.sync(data)
+        commission(model)
+        others = {k:deepcopy(b) for k,b in model.state["buildings"].items() if not model.state["sources"][k]["project"].startswith("projects/org/")}
+        for node in data["nodes"][40:100]:
+            if node["project"].startswith("projects/org/"):
+                node["cityQuarter"] = node["project"].removesuffix(".md")
+        data["version"] = "split"
+        self.assertEqual(model.rebuild_quarter("projects/org",data),59)
+        blocks,parcels = model.world.state["blocks"],model.world.state["parcels"]
+        for node in data["nodes"][40:100]:
+            if node["project"].startswith("projects/org/"):
+                block = blocks[parcels[model.state["buildings"][node["stableId"]]["parcel"]]["block"]]
+                self.assertEqual(block["neighbourhood"],node["cityQuarter"])
+        for key,building in others.items():
+            self.assertEqual(model.state["buildings"][key]["footprint"],building["footprint"])
+        self.assertEqual(len(model.state["residents"]),120)
+        self.assertTrue(any(e["type"] == "quarterRebuilt" for e in model.state["events"]))
+        self.assertEqual(model.audit(),[])
+        model.advance(200)
+        self.assertEqual(model.audit(),[])
+
     def sized_snapshot(self):
         """Three classes of very different size, with two large projects in the biggest."""
         data = snapshot(300,1)
@@ -992,6 +1050,17 @@ class SimulationTests(unittest.TestCase):
         self.assertGreaterEqual(sum(inside)/len(inside),0.6)
 
 class NetworkTests(unittest.TestCase):
+    def test_prune_removes_dead_end_chain_up_to_junction(self):
+        net = Network("P")
+        hub,a,b,c,d = (net.node(x,y) for x,y in ((0,0),(10,0),(20,0),(0,10),(0,-10)))
+        for p,q,kind in ((c,hub,"public-path"),(hub,d,"public-path"),(hub,a,"public-path"),(a,b,"entrance-path")):
+            net.edge(p,q,kind=kind)
+        self.assertEqual(net.prune([b],keep={c,d}),{b:hub,a:hub})
+        self.assertNotIn(a,net.state["nodes"])
+        self.assertEqual(len(net.state["edges"]),2)
+        self.assertEqual(net.prune([c],keep={c}),{})
+        self.assertEqual(net.topology_errors(),[])
+
     def test_geometric_crossing_is_not_a_junction(self):
         net = Network("P")
         a,b,c,d = [net.node(*p) for p in [(-10,0),(10,0),(0,-10),(0,10)]]

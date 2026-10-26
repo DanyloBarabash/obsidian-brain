@@ -154,6 +154,148 @@ def annex(model, parent, identity, size, project=None):
     return None
 
 
+# Wing frames in the parent's local axes (u along its front, v toward its back): (along, inward), front = -inward.
+WING_FRAMES = {"side": ((1, 0), (0, 1)), "back": ((-1, 0), (0, -1)), "flank+": ((0, 1), (1, 0)), "flank-": ((0, -1), (-1, 0))}
+
+
+def _crosses(p, q, r, s):
+    """Segments p-q and r-s cross strictly inside both."""
+    d = (q[0]-p[0])*(s[1]-r[1])-(q[1]-p[1])*(s[0]-r[0])
+    if abs(d) < 1e-9:
+        return False
+    t = ((r[0]-p[0])*(s[1]-r[1])-(r[1]-p[1])*(s[0]-r[0]))/d
+    u = ((r[0]-p[0])*(q[1]-p[1])-(r[1]-p[1])*(q[0]-p[0]))/d
+    return 1e-6 < t < 1-1e-6 and 1e-6 < u < 1-1e-6
+
+
+def wing(model, parent, identity, size, project=None):
+    """Reserve a wing of a project building around it, like a campus: sides, back, forecourt flanks, then further out.
+
+    Wings keep `wing_gap` from the compound; each reaches the parent's gate line by its own path around the
+    buildings. Nothing may overlap foreign land, water, an existing path or footprint. Returns the parcel or None.
+    """
+    world = model.world
+    parcels = world.state["parcels"]
+    f = parcels[parent["parcel"]]["footprint"]
+    gap, margin, gate_margin = VALUES["wing_gap"], VALUES["wing_margin"], VALUES["landmark_site_margin"]
+    along = (math.cos(f["angle"]), math.sin(f["angle"]))
+    radial = (along[1], -along[0])
+    centre = (f["cx"], f["cy"])
+    at = lambda u, v: (centre[0]+along[0]*u+radial[0]*v, centre[1]+along[1]*u+radial[1]*v)
+    local = lambda p: ((p[0]-centre[0])*along[0]+(p[1]-centre[1])*along[1], (p[0]-centre[0])*radial[0]+(p[1]-centre[1])*radial[1])
+    own = [parent["parcel"]]+sorted(k for k,p in parcels.items() if p.get("wingOf") == parent["id"])
+    boxes = []
+    for key in own:
+        pts = [local(p) for p in parcels[key]["footprint"]["polygon"]]
+        boxes.append((min(u for u,_ in pts), max(u for u,_ in pts), min(v for _,v in pts), max(v for _,v in pts)))
+    own_footprints = [parcels[k]["footprint"]["polygon"] for k in own]
+    front, gate_v = -f["fd"]/2, -f["fd"]/2-gate_margin
+    line = [(0.0, gate_v)]+[local(parcels[k]["door"]) for k in own[1:] if parcels[k].get("gateLine")]
+    forbidden = [p["polygon"] for k,p in parcels.items() if k not in own]
+    for block in world.state["blocks"].values():
+        b = block["envelope"]
+        forbidden.append([[b["x"]-8,b["y"]-8],[b["x"]+b["w"]+8,b["y"]-8],[b["x"]+b["w"]+8,b["y"]+b["h"]+8],[b["x"]-8,b["y"]+b["h"]+8]])
+    forbidden += [z["polygon"] for z in world.state["protected"] if z.get("polygon") and z.get("parcel") not in own]
+    solid = [b["footprint"]["polygon"] for b in model.state["buildings"].values()]+[p["polygon"] for k,p in parcels.items() if k not in own]+own_footprints
+    rivers = world.rivers(margin=1200)
+    segments = [(a,b,r["width"]/2+gate_margin) for r in rivers for a,b in zip(r["points"],r["points"][1:])]
+    wet = lambda poly: any(polygon_segment_distance(poly,a,b)<clear for a,b,clear in segments)
+    reach = VALUES["annex_reach"]
+    nodes = world.walk.state["nodes"]
+    paths = []
+    for e in world.walk.state["edges"].values():
+        a, b = nodes[e["a"]], nodes[e["b"]]
+        if min(math.hypot(a["x"]-centre[0],a["y"]-centre[1]), math.hypot(b["x"]-centre[0],b["y"]-centre[1])) < reach+math.hypot(e["length"],0):
+            paths.append(((a["x"],a["y"]),(b["x"],b["y"])))
+    width, depth = size
+    right, left, = max(b[1] for b in boxes), min(b[0] for b in boxes)
+
+    def behind(u, half):
+        return max([b[3] for b in boxes if b[0] < u+half+gap and b[1] > u-half-gap]+[f["fd"]/2])
+
+    def nearest(point):
+        return min(line, key=lambda q: abs(q[0]-point[0]))
+
+    def _wing_slot(frame, centre_uv, route):
+        """Check one slot; return (compactness, geometry) when it is clear."""
+        (au, av), (iu, iv) = WING_FRAMES[frame]
+        middle = at(*centre_uv)
+        axis = (along[0]*au+radial[0]*av, along[1]*au+radial[1]*av)
+        inward = (along[0]*iu+radial[0]*iv, along[1]*iu+radial[1]*iv)
+        polygon,_ = oriented_rect(middle, axis, inward, width+margin*2, depth+margin*2)
+        if any(convex_overlap(polygon,q) for q in forbidden) or wet(polygon):
+            return None
+        footprint,_ = oriented_rect(middle, axis, inward, width, depth)
+        spaced,_ = oriented_rect(middle, axis, inward, width+gap*2-.01, depth+gap*2-.01)
+        if any(convex_overlap(spaced,q) for q in own_footprints) or any(polygon_segment_distance(footprint,a,b) < 1 for a,b in paths):
+            return None
+        points = [at(*p) for p in route]
+        points = [p for i,p in enumerate(points) if i == 0 or math.hypot(p[0]-points[i-1][0],p[1]-points[i-1][1]) > 1e-6]
+        legs = list(zip(points, points[1:]))
+        if any(polygon_segment_distance(q,a,b) < 1 for a,b in legs for q in solid+[footprint]) or wet([list(p) for p in points]):
+            return None
+        if any(_crosses(a,b,c,d) for a,b in legs for c,d in paths):
+            return None
+        spread = max(math.hypot(x-centre[0], y-centre[1]) for x,y in footprint)
+        return spread, (frame, middle, axis, inward, polygon, footprint, points)
+
+    def _build_wing(found):
+        """Lay the chosen wing's paths and reserve its parcel inside the compound."""
+        frame, middle, axis, inward, polygon, footprint, points = found[1]
+        keys = [world.walk.node(*p) for p in points]
+        for a,b in zip(keys, keys[1:]):
+            if a != b:
+                world.walk.edge(a, b, kind="public-path", width=4)
+        entrance = world.walk.node(middle[0]-inward[0]*depth/2, middle[1]-inward[1]*depth/2)
+        world.walk.edge(keys[0], entrance, kind="entrance-path", width=4)
+        key = "annex:"+identity
+        parcel = {"id":key,"block":parent["block"],"district":parent["district"],"box":aabb(polygon),"polygon":polygon,
+                  "footprint":{**aabb(footprint),"polygon":footprint,"cx":middle[0],"cy":middle[1],"fw":width,"fd":depth,"angle":math.atan2(axis[1],axis[0])},
+                  "entrance":entrance,"frontage":width,"face":"annex","source":None,"state":"facility","protected":True,
+                  "facility":identity,"annexOf":parent["id"],"wingOf":parent["id"],"door":list(points[0]),"gateLine":frame == "side","wingFrame":frame,
+                  "createdAt":model.clock["tick"],"project":project}
+        parcels[key] = parcel
+        world.state["blocks"][parent["block"]]["parcels"].append(key)
+        world.state["protected"].append({"id":key,"parcel":key,"box":parcel["box"],"polygon":polygon,"reason":"Wing of a project building"})
+        land = world.state["land"]
+        box = parcel["box"]
+        x,y = min(land["x"],box["x"]-30),min(land["y"],box["y"]-30)
+        world.state["land"] = rect(x,y,max(land["x"]+land["w"],box["x"]+box["w"]+30)-x,max(land["y"]+land["h"],box["y"]+box["h"]+30)-y)
+        return parcel
+
+    rings = []
+    for step in range(0, reach+1, VALUES["annex_step"]):
+        slots = []
+        rings.append(slots)
+        for side in (1, -1):
+            u = side*((right if side > 0 else -left)+gap+step+width/2)
+            door = (u, gate_v)
+            slots.append(("side", (u, front+depth/2), [door, nearest(door)]))
+        u_back = [0] if step else [0, f["fw"]/2+gap+width/2, -(f["fw"]/2+gap+width/2)]
+        for index,u in enumerate(u_back):
+            v = behind(u, width/2)+gap+step+depth/2
+            door = (u, v+depth/2+margin)
+            for side in ((1, -1) if u >= 0 else (-1, 1)):
+                su = side*(max(right, u+width/2) if side > 0 else max(-left, -(u-width/2)))+side*(gap+2)
+                slots.append(("back", (u, v), [door, (su, door[1]), (su, gate_v), nearest((su, gate_v))]))
+            if step == 0 and index == 0:
+                for side in (1, -1):
+                    u = side*max(f["fw"]/2-depth/2, 8+depth/2+margin)
+                    v = gate_v-3-width/2
+                    door = (u-side*(depth/2+margin), v)
+                    slots.append(("flank+" if side > 0 else "flank-", (u, v), [door, (door[0], gate_v), nearest((door[0], gate_v))]))
+    for slots in rings:
+        best = None
+        for frame, (cu, cv), route in slots:
+            found = _wing_slot(frame, (cu, cv), route)
+            # The most compact arrangement wins: the nearest furthest corner, like a campus around its core.
+            if found and (best is None or found[0] < best[0]):
+                best = found
+        if best:
+            return _build_wing(best)
+    return None
+
+
 def protect_access(model, service):
     """Retain existing public approaches, including clear garden-strip easements."""
     world = model.world

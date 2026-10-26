@@ -156,12 +156,11 @@ function vehicles(){
 }
 function pill(text,x,y,size,fill,ink,border){ctx.font=`600 ${size}px -apple-system, sans-serif`;const w=ctx.measureText(text).width+size*1.4,h=size*1.9;ctx.beginPath();ctx.roundRect(x-w/2,y-h/2,w,h,h/2);ctx.fillStyle=fill;ctx.fill();if(border){ctx.strokeStyle=border;ctx.lineWidth=1.5;ctx.stroke();}ctx.fillStyle=ink;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y+.5);ctx.textBaseline='alphabetic';return w;}
 function labels(){
-  // Quarter names sit on pills in the quarter colour; sub-quarters get smaller outlined pills once zoomed in.
+  // Only general district names sit on pills in the district colour.
   labelHits=[];const placed=[],free=(x,y,w,h)=>!placed.some(q=>Math.abs(q.x-x)<(q.w+w)/2+4&&Math.abs(q.y-y)<(q.h+h)/2+2);
   for(const d of state.districts){const active=!state.filter||state.filter===d.id;ctx.globalAlpha=active?1:.35;const p=project(d.label.x,d.label.y,0),size=Math.max(11,Math.min(16,13*state.zoom)),text=`${icons[d.theme]} ${d.title}`,w=text.length*size*.62+size*1.4;
     const anchor=p.y;for(let k=1;!free(p.x,p.y,w,size*2.6)&&k<12;k++)p.y=anchor+(k%2?1:-1)*Math.ceil(k/2)*size*2.2;placed.push({x:p.x,y:p.y,w,h:size*2.6});labelHits.push({x:p.x,y:p.y,w,h:size*2.6,d});pill(text,p.x,p.y,size,d.color,'#1d2622');
     ctx.font=`500 ${Math.max(9,Math.min(12,10*state.zoom))}px -apple-system, sans-serif`;ctx.fillStyle=state.day?'#3d4b45':'#e3e7d5';ctx.textAlign='center';ctx.shadowColor=state.day?'#edf1dd':'#1d2a24';ctx.shadowBlur=5;ctx.fillText(`${d.physicalCount??d.count} будівель · ${d.count} нотаток`,p.x,p.y+size*1.65);ctx.shadowBlur=0;
-    if(state.zoom>=.3)for(const q of d.quarters||[]){const s=project(q.x,q.y,0),qs=Math.max(9,Math.min(12,10*state.zoom)),qw=q.title.length*qs*.6+qs*1.4;if(!free(s.x,s.y,qw,qs*2))continue;placed.push({x:s.x,y:s.y,w:qw,h:qs*2});pill(q.title,s.x,s.y,qs,state.day?'#f6f1e4ee':'#1f2b26ee',state.day?'#2c3a33':'#e8eadb',d.color);}
     ctx.globalAlpha=1;}
 }
 let lastPaint=0,paintMs=0,planVersion=0,labelHits=[];

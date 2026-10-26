@@ -78,6 +78,8 @@
   // Rotations are folded into [-45°,45°) with width and depth swapped, so the two front faces stay visible.
   function orient(cx,cy,w,d,angle,S){let k=Math.round(angle/(Math.PI/2)),a=angle-k*Math.PI/2;if(k%2){[w,d]=[d,w];}return {x:cx*S-w*S/2,y:cy*S-d*S/2,w:w*S,d:d*S,rot:a,rcx:cx*S,rcy:cy*S};}
   function fromPolygon(poly,S){const [a,b,,c]=poly,w=Math.hypot(b[0]-a[0],b[1]-a[1]),d=Math.hypot(c[0]-a[0],c[1]-a[1]),cx=poly.reduce((s,p)=>s+p[0],0)/4,cy=poly.reduce((s,p)=>s+p[1],0)/4;return orient(cx,cy,w,d,Math.atan2(b[1]-a[1],b[0]-a[0]),S);}
+  // Scenario parameters (logical metres): forecourt beyond the compound's buildings and the gallery strip in front.
+  const COMPOUND_EDGE=4,COMPOUND_GALLERY=5;
   // One quarter, one look: walls and roofs derive from the district colour with small, stable shade steps.
   const rgb=hex=>[0,2,4].map(i=>parseInt(hex.slice(1+i,3+i),16)),toHex=c=>'#'+c.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
   const mix=(a,b,t)=>toHex(rgb(a).map((v,i)=>v+(rgb(b)[i]-v)*t));
@@ -139,12 +141,24 @@
     for(const tree of world.trees){const grown=Math.min(1,tree.ageDays/world.maturityDays),s=hash(tree.id);scenery.push({kind:'tree',x:tree.x*S,y:tree.y*S,size:(tree.role==='boulevard-allee'?8:9)+grown*12,seed:tree.species==='conifer'?s-s%3:s-s%3+1});}
     // Garden quarters plant their courtyards densely; this greenery is decorative, not a source.
     for(const d of districts)if(d.theme==='garden')for(const b of d.blocks)if(b.court){const cx=b.court.reduce((s,p)=>s+p.x,0)/b.court.length,cy=b.court.reduce((s,p)=>s+p.y,0)/b.court.length;for(let i=0;i<5;i++){const h=hash(`${cx}:${cy}:${i}`);scenery.push({kind:'tree',x:cx+((h%200)-100)/100*12,y:cy+(((h>>8)%200)-100)/100*12,size:10+h%8,seed:h});}}
-    for(const s of world.services){const f=fromPolygon(s.footprint.polygon,S);scenery.push({kind:'service',function:s.function,...f,h:s.function==='stadium'?98:s.function==='campus'?64:s.function==='solar-centre'?88:s.function==='town-hall'?58:s.function==='library'?22:s.function==='research-lab'?26:s.function==='tribology-lab'?22:s.function==='energy-lab'?20:s.function==='sports-lab'?16:s.function==='article-market'?20:14,facility:s.landmark?s:null,walk:s.door?[pt(s.door)]:null});
+    for(const s of world.services){const f=fromPolygon(s.footprint.polygon,S);scenery.push({kind:'service',function:s.function,...f,h:s.function==='stadium'?98:s.function==='campus'?64:s.function==='solar-centre'?88:s.function==='town-hall'?58:s.function==='library'?22:s.function==='research-lab'?26:s.function==='tribology-lab'?22:s.function==='energy-lab'?20:s.function==='sports-lab'?16:s.function==='motion-lab'?18:s.function==='practice-centre'?20:s.function==='memory-vault'?30:s.function==='lab-depot'?16:s.function==='article-market'?20:14,facility:s.landmark?s:null,walk:s.door?[pt(s.door)]:null});
       if(s.landmark&&s.footprint.fw>=85){const poly=s.footprint.polygon.map(pt),ends=paths.flatMap(p=>[p.points[0],p.points[p.points.length-1]]);let best=null;
         for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],door={x:(a.x+b.x)/2,y:(a.y+b.y)/2};for(const gate of ends){const gap=Math.hypot(gate.x-door.x,gate.y-door.y);if(!best||gap<best.gap)best={door,gate,gap};}}
         if(best&&best.gap>1&&best.gap<=8*S+.5)paths.push({points:[best.gate,best.door],width:4*S,kind:'entrance-path'});
       }
     }
+    // A project building and its sub-project wings stand on one shared forecourt with a gallery along their fronts.
+    const inCompound=new Set(world.services.filter(s=>s.wingOf).flatMap(s=>[s.id,s.wingOf]));for(const o of scenery)if(o.kind==='service'&&o.facility&&inCompound.has(o.facility.id))o.compound=true;
+    for(const host of world.services){const wings=world.services.filter(s=>s.wingOf===host.id);if(!wings.length)continue;
+      const f=host.footprint,along=[Math.cos(f.angle),Math.sin(f.angle)],radial=[along[1],-along[0]],c=[f.cx,f.cy],corners=[host,...wings].flatMap(s=>s.footprint.polygon);
+      const us=corners.map(p=>(p[0]-c[0])*along[0]+(p[1]-c[1])*along[1]),vs=corners.map(p=>(p[0]-c[0])*radial[0]+(p[1]-c[1])*radial[1]);
+      const minU=Math.min(...us)-COMPOUND_EDGE,maxU=Math.max(...us)+COMPOUND_EDGE,minV=Math.min(...vs)-COMPOUND_EDGE,maxV=Math.max(...vs)+COMPOUND_EDGE,cu=(minU+maxU)/2,cv=(minV+maxV)/2;
+      const at=(u,v)=>[c[0]+along[0]*u+radial[0]*v,c[1]+along[1]*u+radial[1]*v],[cx,cy]=at(cu,cv),front=-f.fd/2;
+      scenery.push({kind:'compound',...orient(cx,cy,maxU-minU,maxV-minV,f.angle,S),walk:[pt(at(cu,minV))],members:1+wings.length});
+      // The gallery runs along the fronts that share the main facade line: the main building and its side wings.
+      const row=[host,...wings].map(s=>s.footprint.polygon.map(p=>[(p[0]-c[0])*along[0]+(p[1]-c[1])*along[1],(p[0]-c[0])*radial[0]+(p[1]-c[1])*radial[1]])).filter(q=>Math.abs(Math.min(...q.map(p=>p[1]))-front)<1).flat();
+      const gu0=Math.min(...row.map(p=>p[0])),gu1=Math.max(...row.map(p=>p[0])),gv=front-COMPOUND_GALLERY/2-1,[gx,gy]=at((gu0+gu1)/2,gv);
+      scenery.push({kind:'gallery',...orient(gx,gy,gu1-gu0,COMPOUND_GALLERY,f.angle,S),walk:[pt(at((gu0+gu1)/2,front-COMPOUND_GALLERY*2))],title:host.title,accent:(byDistrict.get(host.district)||fallback)?.color});}
     for(const o of scenery)if(o.facility){const d=byDistrict.get(o.facility.district);if(d){const poly=o.facility.footprint.polygon.map(pt);d.minX=Math.min(d.minX,...poly.map(p=>p.x));d.maxX=Math.max(d.maxX,...poly.map(p=>p.x));d.minY=Math.min(d.minY,...poly.map(p=>p.y));d.maxY=Math.max(d.maxY,...poly.map(p=>p.y));}}
     const placePaths=new Set();
     for(const place of world.places||[]){const [px,py]=place.position;scenery.push({kind:'place',x:px*S,y:py*S,w:12,d:12,h:12,activity:place.activity,district:place.district,facility:place});

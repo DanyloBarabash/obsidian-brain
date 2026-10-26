@@ -1,12 +1,15 @@
 """Demand-backed thematic landmarks on actual reserved and reachable parcels."""
 
 from copy import deepcopy
+import math
 
 from .profile import VALUES
-from .landmarks import annex, market_hall, town_hall, upgrade
+from .landmarks import annex, market_hall, town_hall, upgrade, wing
 from .precincts import sync as sync_precincts
 
 
+# Bump to re-place existing wings with a new arrangement; wings are derived, never sources.
+WING_LAYOUT = 3
 FACILITIES = {
     "sports": ("stadium", "Стадіон і тренувальний центр"),
     "science": ("campus", "Науковий кампус"),
@@ -62,7 +65,25 @@ def sync_projects(model):
     complex; older stand-alone project estates move into it once the complex exists. Other topics keep own sites.
     """
     world = model.world
-    for owner in model.state["sources"].values():
+    # Outdated wings go first, all of them, so the new arrangement is not shaped by the old one.
+    hosts = set()
+    for identity,service in sorted(world.state["services"].items()):
+        if service.get("wingOf") and service.get("wingLayout") != WING_LAYOUT:
+            hosts.add(service["wingOf"])
+            remove_project_facility(model,identity,"Wings are re-arranged around their project building")
+    for host in sorted(hosts & set(world.state["services"])):
+        # Paths of older arrangements that now lead nowhere near the project building are removed too.
+        f,walk = world.state["services"][host]["footprint"],world.walk
+        keep = {p["entrance"] for p in world.state["parcels"].values()}|kept_nodes(world)
+        degree = {}
+        for edge in walk.state["edges"].values():
+            for end in (edge["a"],edge["b"]):
+                degree[end] = degree.get(end,0)+1
+        ends = [k for k,n in sorted(walk.state["nodes"].items()) if degree.get(k,0) <= 1 and k not in keep
+                and math.hypot(n["x"]-f["cx"],n["y"]-f["cy"]) < VALUES["annex_reach"]]
+        relocate(model,walk.prune(ends,keep))
+    # Parents first: a sub-project wing needs its parent project building to exist.
+    for owner in sorted(model.state["sources"].values(),key=lambda s:(s["path"].count("/"),s["path"])):
         quarter = owner.get("quarter")
         if not (owner["available"] and quarter and owner.get("plannedQuarter") == quarter
                 and owner["kind"] in ("hub", "org") and owner["path"] == owner["project"]):
@@ -71,6 +92,17 @@ def sync_projects(model):
         existing = world.state["services"].get(identity)
         if existing and not owner.get("landmark"):
             remove_project_facility(model,identity)
+            continue
+        host = parent_project(model,owner)
+        if existing and host and (existing.get("annexOf") != host["id"] or existing.get("wingLayout") != WING_LAYOUT):
+            remove_project_facility(model,identity,"The sub-project building becomes a wing of its parent project building")
+            existing = None
+        if host:
+            if existing and (existing["function"],existing["title"]) != (owner["landmark"],annex_title(owner)):
+                existing.update(function=owner["landmark"],title=annex_title(owner))
+                model.emit("projectAnnexChanged",facility=identity,owner=owner["id"],function=owner["landmark"],reason="The project's subject changed")
+            if not existing and owner.get("landmark") and model.state["budget"]["available"] >= VALUES["building_cost"]:
+                found_annex(model,owner,identity,host,is_wing=True)
             continue
         parent = world.state["services"].get("facility:"+owner["class"])
         clustered = owner["class"] in VALUES["landmark_sites"]
@@ -116,11 +148,41 @@ def annex_title(owner):
     return owner["landmarkTitle"] if owner["landmarkTitle"] == owner["title"] else f'{owner["landmarkTitle"]} · {owner["title"]}'
 
 
-def found_annex(model, owner, identity, parent):
-    """Build a project's own bay into its cluster landmark complex."""
+def kept_nodes(world, removed=None):
+    """Walk nodes that a pruned path must not take away: service entrances and outdoor seats."""
+    keep = set()
+    for service in world.state["services"].values():
+        if service["id"] != removed:
+            keep |= {service.get("entrance")}|set(service.get("seats",[]))
+    return keep-{None}
+
+
+def relocate(model, moved):
+    """Residents standing on pruned path nodes step to where the path still exists; routes are re-planned later."""
+    for agent in model.state["residents"].values():
+        if agent["node"] in moved:
+            home = model.state["buildings"][agent["id"]]
+            agent["node"] = moved[agent["node"]] or model.world.state["parcels"][home["parcel"]]["entrance"]
+            agent.update(edge=0,progress=0)
+
+
+def parent_project(model, owner):
+    """Building of the nearest ancestor project hub that has one; sub-projects extend it as wings."""
+    services = model.world.state["services"]
+    ancestors = [s for s in model.state["sources"].values() if s["kind"] in ("hub","org") and s["available"]
+                 and owner["path"].startswith(s["path"].removesuffix(".md")+"/")]
+    for source in sorted(ancestors,key=lambda s:-len(s["path"])):
+        service = services.get("project-facility:"+source["id"])
+        if service and service.get("parcel") in model.world.state["parcels"]:
+            return service
+    return None
+
+
+def found_annex(model, owner, identity, parent, is_wing=False):
+    """Build a project's own bay into its cluster landmark complex, or a wing of its parent project building."""
     world = model.world
     size = VALUES["project_landmark_sites"].get(owner["landmark"], VALUES["annex_site"])
-    parcel = annex(model,parent,identity,size,owner["project"])
+    parcel = wing(model,parent,identity,size,owner["project"]) if is_wing else annex(model,parent,identity,size,owner["project"])
     if parcel is None:
         return None
     model.state["budget"]["available"] -= VALUES["building_cost"]
@@ -131,7 +193,8 @@ def found_annex(model, owner, identity, parent):
                "title":annex_title(owner),
                "footprint":deepcopy(parcel["footprint"]),"entrance":parcel["entrance"],"capacity":VALUES["service_capacity"],
                "hours":[6,22],"enabled":True,"occupants":[],"reservations":[],"queue":[],"state":"open",
-               "reason":"A project bay of its cluster landmark complex, on the complex's own front path"}
+               **({"wingOf":parent["id"],"wingLayout":WING_LAYOUT} if is_wing else {}),
+               "reason":"A sub-project wing sharing its parent project's site and forecourt" if is_wing else "A project bay of its cluster landmark complex, on the complex's own front path"}
     world.state["services"][identity] = service
     model.emit("projectAnnexFounded",facility=identity,owner=owner["id"],project=owner["project"],complex=parent["id"],reason=service["reason"])
     upgrade(model,service)
@@ -148,6 +211,10 @@ def remove_project_facility(model, identity, reason="The project hub opted out w
                 model.transit.remove(agent["id"])
             model.activities._return_home(agent)
     parcel = world.state["parcels"].get(service["parcel"])
+    if parcel and parcel.get("wingOf"):
+        # A removed wing leaves no dead-end path behind; entrances and occupied nodes stay.
+        keep = {p["entrance"] for p in world.state["parcels"].values() if p is not parcel}|kept_nodes(world,identity)
+        relocate(model,world.walk.prune([parcel["entrance"]],keep))
     if parcel and parcel.get("facility") == identity:
         if parcel["id"].startswith(("estate:", "annex:")):
             # A dedicated estate exists only for its landmark; drop it with its protected approach.

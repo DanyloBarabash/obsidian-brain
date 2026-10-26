@@ -9,10 +9,11 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from classification import SUBJECTS
 from server import Vault
 from simulation import Simulation
 from simulation.clusters import audit_clusters
-from simulation.profile import VALUES, convex_overlap
+from simulation.profile import VALUES, convex_overlap, polygon_segment_distance
 from simulation.world import TICKS, World, wedge_offset
 
 
@@ -57,6 +58,27 @@ class ProjectDistrictTests(unittest.TestCase):
             self.assertFalse(model.sync(Vault(root,Path(directory)/"state").build()))
             self.assertEqual(state,model.state)
             self.assertEqual(Simulation(state).state,state)
+
+    def test_each_subject_project_owns_a_unique_landmark(self):
+        functions = [function for _, function, _, _ in SUBJECTS.values()]
+        self.assertEqual(len(functions),len(set(functions)))
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            for path,title,domain in (("projects/memory.md","Memory","knowledge-management"),("projects/lab.md","Lab","lab-operations"),
+                                      ("projects/club/plans.md","Plans","sports-ai"),("projects/club/vision.md","Vision","sports-computer-vision")):
+                self.hub(root,path,title,f"city_topic: {'sports' if 'club' in path else 'technology'}\ndomain: {domain}\n")
+            nodes={n["id"]:n for n in Vault(root,Path(directory)/"state").build()["nodes"]}
+            self.assertEqual([nodes[p]["cityLandmark"] for p in ("projects/memory.md","projects/lab.md","projects/club/plans.md","projects/club/vision.md")],
+                             ["memory-vault","lab-depot","practice-centre","motion-lab"])
+
+    def test_city_quarter_groups_a_nested_hub_into_another_quarter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/club/vision.md","Vision")
+            self.hub(root,"projects/club/vision/assets.md","Assets","city_quarter: projects/club/vision\ncity_landmark: none\n")
+            nodes={n["id"]:n for n in Vault(root,Path(directory)/"state").build()["nodes"]}
+            self.assertEqual(nodes["projects/club/vision/assets.md"]["cityQuarter"],"projects/club/vision")
+            self.assertEqual(nodes["projects/club/vision/assets.md"]["cityLandmark"],"")
 
     def test_project_building_is_a_bay_of_its_cluster_complex(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -205,6 +227,40 @@ class ProjectDistrictTests(unittest.TestCase):
             self.assertTrue(audit_clusters(model)["passed"],audit_clusters(model))
             self.assertEqual(model.audit(),[])
             self.assertEqual(sum((b-a)%TICKS or TICKS for a,b in model.world.state["wedges"].values()),TICKS)
+
+    def test_sub_project_buildings_are_wings_of_their_project_building(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/club.md","Клуб","city_topic: sports\n")
+            self.hub(root,"projects/club/plans.md","Plans","city_topic: sports\ndomain: sports-ai\n")
+            self.hub(root,"projects/club/vision.md","Vision","city_topic: sports\ndomain: sports-computer-vision\n")
+            model=Simulation();model.sync(Vault(root,Path(directory)/"state").build())
+            services=model.world.state["services"]
+            parent=next(s for s in services.values() if s.get("landmark") and s.get("project")=="projects/club.md")
+            wings=[s for s in services.values() if s.get("wingOf")==parent["id"]]
+            self.assertEqual(sorted(w["function"] for w in wings),["motion-lab","practice-centre"])
+            members=[parent]+wings
+            for wing in wings:
+                poly=wing["footprint"]["polygon"]
+                gap=min(polygon_segment_distance(poly,a,b) for other in members if other is not wing
+                        for a,b in zip(other["footprint"]["polygon"],other["footprint"]["polygon"][1:]+other["footprint"]["polygon"][:1]))
+                # Side and back wings touch the compound at the wing gap; forecourt flanks stand across the gate line.
+                self.assertLessEqual(gap,VALUES["landmark_site_margin"]+VALUES["wing_gap"]+1e-6)
+            self.assertEqual(model.audit(),[])
+
+    def test_wings_surround_the_project_building_like_a_campus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/club.md","Клуб","city_topic: sports\n")
+            for name,domain in (("plans","sports-ai"),("vision","sports-computer-vision"),("pool","swimming"),("cycle","cycling"),("medic","medicine")):
+                self.hub(root,f"projects/club/{name}.md",name,f"city_topic: sports\ndomain: {domain}\ncity_subject: {'' if name in ('plans','vision') else domain if domain!='medicine' else 'medicine'}\n")
+            model=Simulation();model.sync(Vault(root,Path(directory)/"state").build())
+            parcels=model.world.state["parcels"]
+            wings=[p for p in parcels.values() if p.get("wingFrame")]
+            self.assertGreaterEqual(len(wings),4)
+            self.assertGreaterEqual(len({p["wingFrame"].rstrip("+-") for p in wings}),2)
+            self.assertEqual(model.world.walk.topology_errors(),[])
+            self.assertEqual(model.audit(),[])
 
     def test_legacy_addresses_wait_for_explicit_rebuild(self):
         with tempfile.TemporaryDirectory() as directory:

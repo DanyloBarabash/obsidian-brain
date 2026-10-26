@@ -34,6 +34,10 @@ SUBJECTS = {
     "music": ("culture", "concert-hall", "Концертний зал", ("music", "музик")),
     "solar": ("energy", "solar-centre", "Сонячна станція", ("solar", "сонячн")),
     "lubrication": ("science", "tribology-lab", "Лабораторія мастил і бульбашок", ("lubric", "мастил", "tribolog", "bubble", "бульбаш")),
+    "motion-analysis": ("sports", "motion-lab", "Лабораторія аналізу рухів", ("computer-vision", "computer vision", "pose-estimation", "аналіз рух")),
+    "practice-planning": ("sports", "practice-centre", "Центр тренувальних планів", ("sports-ai", "practice plan", "тренувальн план")),
+    "knowledge-memory": ("technology", "memory-vault", "Сховище пам’яті", ("knowledge-management", "memory system", "пам’ят")),
+    "lab-operations": ("technology", "lab-depot", "Лабораторний склад обліку", ("lab-operations", "inventory", "інвентар")),
     "sports-science": ("sports", "sports-lab", "Лабораторія спортивної науки", ("sports-technology", "sports science", "biomechan", "біомехан")),
 }
 TOPICS.update({"health": ("Здоров’я й медицина", "#9ed6cb", "academy"),
@@ -65,7 +69,8 @@ def project_profile(path, note, parents, previous=None, established=False):
     topic = topic or CLASS_TOPICS.get(meta.get("class"), meta.get("class", "commons"))
     if not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", topic):
         raise ValueError(f"Invalid city_topic for {path}: {topic}")
-    quarter = (previous or {}).get("cityQuarter") or path.removesuffix(".md")
+    # `city_quarter` explicitly groups a nested hub into another quarter; otherwise the quarter is never moved.
+    quarter = meta.get("city_quarter") or (previous or {}).get("cityQuarter") or path.removesuffix(".md")
     function = meta.get("city_landmark") or (category[1] if category and category[0] == topic else DEFAULT_LANDMARKS.get(topic, "district-hall"))
     # `city_landmark: none` opts a project hub out of its own landmark.
     function = "" if function == "none" else function

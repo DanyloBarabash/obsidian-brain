@@ -2,6 +2,8 @@
 (function(root){
   'use strict';
   // Plan heights of the 2D atlas, so overlays and agents meet the ground where they did before.
+  // A project compound's paving sits above the court layer; its buildings stand on it.
+  const COMPOUND_LIFT=.55;
   const Z={terrain:12,shore:13,water:13.4,pad:14,court:14.4,sidewalk:15,carriage:15.2,path:15.1,bridge:17,base:14,lot:14.1,walk:14.2};
   const WINDOW={w:4.2,h:6,first:8,floor:13,spacing:11,top:5,offset:.35,maxFloors:14,maxColumns:10};
   const BRIDGE={rail:7,post:12,pier:45,pierWidth:6};
@@ -226,8 +228,22 @@
     return P.top;
   }
 
+  function compound(B,G,o,day){
+    // Shared site of a project building and its wings: one paved forecourt with a kerb, above the surrounding ground.
+    const P=painter(B,G,localFrame(o,doorSide(o,frameOf(o))),Z.base,c=>c),{W:w,D:d}=P;
+    P.quad(0,0,w,d,COMPOUND_LIFT-.05,P.col(day?'#d8d2c0':'#717a6e'));P.line([[0,0,COMPOUND_LIFT+.2],[w,0,COMPOUND_LIFT+.2],[w,d,COMPOUND_LIFT+.2],[0,d,COMPOUND_LIFT+.2],[0,0,COMPOUND_LIFT+.2]],P.col(day?'#b9b19b':'#59614f'),.6);
+  }
+
+  function gallery(B,G,o,day){
+    // A covered gallery along the shared facade line, with one project sign at its middle.
+    const P=painter(B,G,localFrame(o,doorSide(o,frameOf(o))),Z.base+COMPOUND_LIFT,c=>c),{W:w,D:d}=P,post=P.col(day?'#8b8f88':'#9aa49a');
+    P.box(0,0,w,d,.7,P.col(day?'#c9c3b4':'#7b8379'),undefined,9);
+    for(let u=0;u<=w+.01;u+=w/Math.max(2,Math.round(w/14)))for(const v of [.4,d-.4])P.pole(Math.min(u,w-.4),v,0,9,post,.45);
+    P.box(w/2-2.5,d+1,5,1.2,13,P.col(o.accent||'#c9a77c'));P.face([[w/2-2,d+2.25,8],[w/2+2,d+2.25,8],[w/2+2,d+2.25,11.5],[w/2-2,d+2.25,11.5]],P.col(day?'#f3ead2':'#f7dfa4'),!day);
+  }
+
   function service(B,G,o,day,faded,trees){
-    const L=localFrame(o,doorSide(o,frameOf(o))),fade=c=>faded?mix(c,colour(day?FADE.day:FADE.night),1-FADE.keep):c,P=painter(B,G,L,Z.base,fade),{W:w,D:d}=P,fn=o.function;
+    const L=localFrame(o,doorSide(o,frameOf(o))),fade=c=>faded?mix(c,colour(day?FADE.day:FADE.night),1-FADE.keep):c,P=painter(B,G,L,Z.base+(o.compound?COMPOUND_LIFT:0),fade),{W:w,D:d}=P,fn=o.function;
     const stone=P.col(day?'#d5ccba':'#9ba89a'),win={glass:P.col(day?'#527e91':'#405960'),lit:day?null:P.col('#cbbd89'),seed:o.x|0};
     if(fn==='swimming-pool'){
       P.quad(0,0,w,d,.1,P.col(day?'#e2d9be':'#829b97'));P.box(w*.06,d*.07,w*.88,d*.15,12,stone);P.windows(w*.06,d*.07,w*.88,d*.15,0,12,win,8);
@@ -348,6 +364,54 @@
       for(const u of [w*.12,w*.88]){P.pole(u,lane-1,.5,7,white,.5);P.pole(u,lane+d*.16+1,.5,7,white,.5);P.stick([u,lane-1,7],[u,lane+d*.16+1,7],P.col('#d7a64b'),.5);}
       for(const u of [w*.3,w*.7]){P.pole(u,d*.95,0,11,P.col('#5f6f6c'),.7);P.box(u-1.2,d*.95-1,2.4,2,1.6,P.col('#2f3b40'),undefined,11);}
       P.box(w*.42,d*.84,w*.16,d*.1,.8,P.col('#5d7f8c'));
+    }else if(fn==='motion-lab'){
+      // Exercise analysis: a glass motion-capture studio under a ring truss of cameras, a gridded capture stage and a pose-skeleton screen.
+      const truss=P.col('#4f5d63'),cam=P.col('#22303a'),led=P.col(day?'#d6524a':'#ff6a5a'),cx=w*.62,cy=d*.5,r=Math.min(w*.3,d*.42);
+      P.quad(-2,-2,w+4,d+4,.1,P.col(day?'#c8cabc':'#5d685f'));
+      P.box(0,d*.1,w*.26,d*.8,14,P.col('#3e4a52'),P.col('#56646c'));P.windows(0,d*.1,w*.26,d*.8,0,14,win,5);
+      P.quad(cx-r,cy-r,r*2,r*2,.3,P.col(day?'#d9dcd5':'#7f8783'));
+      for(let k=1;k<6;k++){P.stick([cx-r+r*2*k/6,cy-r,.45],[cx-r+r*2*k/6,cy+r,.45],P.col('#9aa3a0'),.2);P.stick([cx-r,cy-r+r*2*k/6,.45],[cx+r,cy-r+r*2*k/6,.45],P.col('#9aa3a0'),.2);}
+      const ring=[];for(let k=0;k<12;k++){const a=k/12*Math.PI*2;ring.push([cx+Math.cos(a)*r,cy+Math.sin(a)*r,16]);}
+      P.line([...ring,ring[0]],truss,.8);
+      for(let k=0;k<12;k+=3)P.pole(ring[k][0],ring[k][1],0,16,truss,.7);
+      for(let k=0;k<12;k++){P.box(ring[k][0]-.9,ring[k][1]-.9,1.8,1.8,1.4,cam,undefined,14.4);P.box(ring[k][0]-.3,ring[k][1]-.3,.6,.6,.4,led,undefined,14.1);}
+      const bone=P.col(day?'#7fd1c3':'#9ff0de'),sx=w*.13,sy=d*.9+.3,sz=3;
+      for(const [a,c] of [[[0,8],[0,4.6]],[[0,4.6],[-1.6,1]],[[0,4.6],[1.6,1]],[[0,7.2],[-2,5.4]],[[0,7.2],[2,5.4]]])P.stick([sx+a[0],sy,sz+a[1]],[sx+c[0],sy,sz+c[1]],bone,.35);
+      P.frontDisc(sx,sz+8.8,.8,bone,!day,sy+.05);
+    }else if(fn==='practice-centre'){
+      // Practice planning: a coaching house with a tactics board, a small pitch with goals and a row of drill cones.
+      const white=P.col(day?'#f4f0e0':'#d2d8c6'),grass=P.col(day?'#6f9d5f':'#3f5e3e'),stripe=P.col(day?'#7fae6c':'#47684a');
+      P.quad(-2,-2,w+4,d+4,.1,P.col(day?'#c9c5ae':'#5f685a'));P.box(0,0,w*.42,d*.4,20,P.col('#d9c9a6'),P.col('#a99c86'));P.windows(0,0,w*.42,d*.4,0,20,win,6);
+      P.roofX(-1,-1,w*.42+2,d*.4+2,20,8,P.col(day?'#8b6f5a':'#5d4a3e'),P.col('#d9c9a6'));
+      P.box(w*.46,d*.06,w*.16,1,10,P.col('#6f675c'),undefined,1);P.face([[w*.47,1.1,3],[w*.61,1.1,3],[w*.61,1.1,10],[w*.47,1.1,10]],P.col(day?'#f1efe6':'#cfd0c4'));
+      for(const [u,z,c] of [[.5,8,'#c75b4a'],[.55,5,'#3f6aa0'],[.58,8,'#c75b4a'],[.52,4.5,'#3f6aa0']])P.frontDisc(w*u,z,.55,P.col(c),false,1.2);
+      const px=w*.48,py=d*.3,pw=w*.48,pd=d*.62;P.quad(px,py,pw,pd,.2,grass);for(let k=0;k<4;k+=2)P.quad(px+pw*k/4,py,pw/4,pd,.25,stripe);
+      P.line([[px+1,py+1,.35],[px+pw-1,py+1,.35],[px+pw-1,py+pd-1,.35],[px+1,py+pd-1,.35],[px+1,py+1,.35]],white,.3);P.stick([px+pw/2,py+1,.35],[px+pw/2,py+pd-1,.35],white,.3);
+      for(const u of [px+.5,px+pw-.5]){P.pole(u,py+pd*.4,0,3,white,.25);P.pole(u,py+pd*.6,0,3,white,.25);P.stick([u,py+pd*.4,3],[u,py+pd*.6,3],white,.25);}
+      for(let k=0;k<6;k++)P.cylinder(w*(.06+k*.065),d*.6,.7,0,1.4,P.col('#e88a3a'));
+      for(let k=0;k<3;k++)P.box(w*(.06+k*.12),d*.8,w*.08,1.4,1.4,P.col('#c9b07c'),undefined,0);
+    }else if(fn==='memory-vault'){
+      // Knowledge memory: a domed rotunda with a glowing index ring, two archive wings of note drawers and linked graph nodes on the roof.
+      const stone=P.col(day?'#d8d0c0':'#8e8f86'),glow=P.col(day?'#8fb7d8':'#ffd98a'),cx=w*.5,cy=d*.45,r=Math.min(w,d)*.24;
+      P.quad(-2,-2,w+4,d+4,.1,P.col(day?'#cbc7b6':'#5e665c'));
+      for(const u of [0,w*.7]){P.box(u,d*.12,w*.3,d*.62,16,P.col('#c9c1d6'),P.col('#a39bb5'));
+        for(let row=0;row<3;row++)for(let k=0;k<5;k++)P.face([[u+w*.3*(k+.15)/5,d*.74+.05,3+row*4],[u+w*.3*(k+.85)/5,d*.74+.05,3+row*4],[u+w*.3*(k+.85)/5,d*.74+.05,5.6+row*4],[u+w*.3*(k+.15)/5,d*.74+.05,5.6+row*4]],P.col(['#7c6fa6','#5f8fa8','#a2869d','#6f9f8a'][(row+k)%4]),!day&&(row+k)%3===0);}
+      P.cylinder(cx,cy,r,0,24,stone);P.dome(cx,cy,r,24,P.col('#9a93b8'));P.cylinder(cx,cy,r*1.04,15,1.4,glow);
+      for(let k=0;k<6;k++){const a=k/6*Math.PI*2;P.cylinder(cx+Math.cos(a)*r*1.12,cy+Math.sin(a)*r*1.12,.9,0,15,stone);}
+      const nodes=[[w*.08,d*.25],[w*.22,d*.55],[w*.15,d*.68],[w*.78,d*.3],[w*.9,d*.6],[w*.82,d*.66]];
+      for(const [u,v] of nodes){P.pole(u,v,16,19,stone,.4);P.box(u-.9,v-.9,1.8,1.8,1.8,glow,undefined,19);}
+      for(const [i,j] of [[0,1],[1,2],[0,2],[3,4],[4,5],[3,5]])P.stick([nodes[i][0],nodes[i][1],20],[nodes[j][0],nodes[j][1],20],glow,.25);
+      P.box(cx-3,d*.74,6,4,10,P.col(day?'#4e5a6b':'#2c3442'));P.box(cx-6,d*.74+4,12,3,1.2,stone);
+    }else if(fn==='lab-depot'){
+      // Lab operations: an inventory hall with roller doors and a loading dock, a scanned gate and a yard of labelled sample racks.
+      const metal=P.col('#8a9796'),white=P.col(day?'#eef0ea':'#c7cdc4');
+      P.quad(-2,-2,w+4,d+4,.1,P.col(day?'#c6c4b4':'#5f665b'));P.box(0,0,w*.6,d*.55,16,P.col('#b9c6c4'),P.col('#8fa09f'));P.windows(0,0,w*.6,d*.55,8,16,win,6);
+      for(let k=0;k<3;k++){const u=w*(.04+k*.19);P.face([[u,d*.55+.05,0],[u+w*.13,d*.55+.05,0],[u+w*.13,d*.55+.05,7],[u,d*.55+.05,7]],P.col(day?'#7f8b8f':'#4a5458'));for(let z=1.4;z<7;z+=1.4)P.stick([u,d*.55+.2,z],[u+w*.13,d*.55+.2,z],P.col('#6d777a'),.2);}
+      P.box(0,d*.55,w*.6,3,1.4,P.col('#a6a28f'));
+      P.pole(w*.66,d*.62,0,7,metal,.5);P.pole(w*.66,d*.86,0,7,metal,.5);P.stick([w*.66,d*.62,7],[w*.66,d*.86,7],metal,.5);P.box(w*.66-.6,d*.72,1.2,3,1.2,P.col('#c75b4a'),undefined,6);
+      for(let row=0;row<2;row++){const v=d*(.1+row*.24),u=w*.68;P.box(u,v,w*.28,1,10,metal,undefined,0);
+        for(let level=0;level<3;level++)for(let k=0;k<4;k++)P.box(u+w*.28*(k+.1)/4,v+1,w*.28*.75/4,2.4,2.4,P.col(['#d8b45c','#6f9fc4','#c98670','#8fb47a'][(k+level+row)%4]),undefined,1+level*3.2);}
+      for(let k=0;k<3;k++){P.cylinder(w*(.06+k*.07),d*.8,1.6,0,6,white);P.disc(w*(.06+k*.07),d*.8,1.6,1.6,6.1,P.col('#4f86b0'));}
     }else if(fn==='research-lab'||fn==='energy-lab'){
       P.quad(-2,-2,w+4,d+4,.1,P.col(day?'#c3c8b8':'#5d6a60'));const h=fn==='energy-lab'?20:26;
       P.box(0,0,w,d,h,P.col(fn==='energy-lab'?'#b7c9a9':'#c9d6d6'),P.col('#9fb2b4'));P.windows(0,0,w,d,0,h,win,7);
@@ -722,6 +786,8 @@
       if(o.kind==='tree')trees.push({x:o.x,y:o.y,size:o.size,conifer:o.seed%3===0});
       else if(o.kind==='lamp')lamps.push({x:o.x,y:o.y});
       else if(o.kind==='service'){const top=service(c.lit,c.glow,o,day,o.facility?!matches(o.facility):false,trees);if(o.facility)picks.push({node:{...o.facility,derived:true,physicalId:o.facility.id},cx:o.rcx??o.x+o.w/2,cy:o.rcy??o.y+o.d/2,w:o.w,d:o.d,h:Math.max(6,top),z:Z.base,rot:o.rot||0});}
+      else if(o.kind==='compound')compound(c.lit,c.glow,o,day);
+      else if(o.kind==='gallery')gallery(c.lit,c.glow,o,day);
       else if(o.kind==='place'){placeModel(c.lit,c.glow,o,day);if(o.facility)picks.push({node:{...o.facility,derived:true,physicalId:o.facility.id},cx:o.x,cy:o.y,w:12,d:12,h:6,z:Z.base,rot:0});}
       else furniture(c.lit,c.glow,o,day);}
     const out=new Map();for(const [key,c] of chunks)out.set(key,{lit:c.lit.arrays(),glow:c.glow.arrays()});

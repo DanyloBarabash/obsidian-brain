@@ -434,10 +434,14 @@ def main():
     parser.add_argument("--open", action="store_true")
     parser.add_argument("--reader", default=READER_URL, help="local Brain Reader that stocks the article market")
     parser.add_argument("--rebuild", action="store_true", help="replace the saved city with a fresh build (a backup is kept)")
+    parser.add_argument("--rebuild-quarter", metavar="PROJECT", help="re-lay the sub-projects of one project hub, e.g. projects/newstream (a backup is kept)")
     args = parser.parse_args()
     vault = Vault(args.vault)
     if args.rebuild:
         vault.preparation.rebuild()
+    if args.rebuild_quarter:
+        count = vault.preparation.rebuild_quarter(args.rebuild_quarter.removesuffix(".md"), vault.build())
+        print(f"Re-laid {count} sources of {args.rebuild_quarter}", flush=True)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(vault, Market(args.reader)))
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"Brain City · {url} · {vault.root}", flush=True)

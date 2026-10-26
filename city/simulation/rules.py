@@ -11,7 +11,7 @@ RULES = [
     (1,"Правда Brain",[STATE+"test_vault_unchanged",ENGINE+"test_staged_boundary_and_truth"]),
     (2,"Нотатка, дім і мешканець",[ENGINE+"test_staged_boundary_and_truth",ENGINE+"test_inspection_does_not_invent_files"]),
     (3,"Чесні службові об’єкти",[ENGINE+"test_inspection_does_not_invent_files"]),
-    (4,"Постійна геометрія",[ENGINE+"test_growth_infill_edge_and_stable_geometry",ENGINE+"test_save_load_and_idempotent_events"]),
+    (4,"Постійна геометрія",[ENGINE+"test_growth_infill_edge_and_stable_geometry",ENGINE+"test_save_load_and_idempotent_events",ENGINE+"test_rebuild_quarter_splits_sub_projects_and_keeps_the_city"]),
     (5,"Ідентичність і міграція",[STATE+"test_legacy_migration_and_restart",STATE+"test_rename_and_conflicting_ids"]),
     (6,"Спільна земля й резерви",[ENGINE+"test_protected_land_and_corridors",ENGINE+"test_all_pedestrian_paths_avoid_building_interiors"]),
     (7,"Світові одиниці",[ENGINE+"test_parameters_are_declared_assumptions",ENGINE+"test_pause_reduced_motion_and_frame_independence"]),

@@ -26,6 +26,11 @@ SAVE_PARTS = {"world": ("world", "sources", "buildings", "knowledge", "budget"),
               "live": ("clock", "residents", "transit", "economy", "weather", "world.services"), "events": ("events",)}
 
 
+def compound(parcel):
+    """Project compound a parcel belongs to when wings are involved: the parent project building's id."""
+    return parcel.get("wingOf") or (parcel.get("facility") if parcel.get("facility","").startswith("project-facility:") else None)
+
+
 class Simulation:
     """Compose all rule mechanisms without activating the replacement renderer."""
 
@@ -49,6 +54,7 @@ class Simulation:
         self._pending = {key for key,b in self.state["buildings"].items() if b["lifecycle"] in ("reserved","connected","construction")}
         if self.state["sources"]:
             sync_facilities(self)
+        self.activities.repair_routes()
 
     def emit(self, event_type, **details):
         """Append ordered logical events; wall-clock and FPS never enter the model."""
@@ -99,6 +105,58 @@ class Simulation:
         except Exception:
             self.__init__(pickle.loads(before))
             raise
+
+    def rebuild_quarter(self, prefix, snapshot):
+        """Explicitly re-lay the sub-projects of one project hub; the hub and the rest of the city stay.
+
+        Blocks that held the released buildings take the sub-quarter most of them now belong to, then the
+        snapshot is synced so the released sources settle into their own sub-quarters. Returns their count.
+        """
+        before = pickle.dumps(self.state,pickle.HIGHEST_PROTOCOL)
+        try:
+            parcels,services = self.world.state["parcels"],self.world.state["services"]
+            released = {key for key,source in self.state["sources"].items() if source["project"].startswith(prefix+"/")}
+            block_of = {key:parcels[self.state["buildings"][key]["parcel"]]["block"] for key in released}
+            gone = {"building:"+key for key in released}
+            for agent in self.state["residents"].values():
+                if agent["id"] in released:
+                    self.activities.deactivate(agent)
+                elif agent.get("goal") in gone:
+                    self.transit.remove(agent["id"])
+                    self.activities._return_home(agent)
+            for key in released:
+                building = self.state["buildings"].pop(key)
+                cost = VALUES["building_cost"] if building["physicalId"] == building["id"] else VALUES["apartment_unit_cost"]
+                budget = self.state["budget"]
+                budget.update(issued=budget["issued"]-VALUES["credit_per_source"],spent=budget["spent"]-cost,
+                              available=budget["available"]-VALUES["credit_per_source"]+cost)
+                for table in (self.state["sources"],self.state["residents"]):
+                    del table[key]
+                services.pop("building:"+key,None)
+                self._pending.discard(key)
+            for house_id,house in list(self.state.get("housing",{}).items()):
+                house["sources"] = [key for key in house["sources"] if key not in released]
+                if not house["sources"]:
+                    del self.state["housing"][house_id]
+            for parcel in parcels.values():
+                if parcel["source"] in released or (parcel.get("sources") and set(parcel["sources"]) <= released):
+                    parcel.update(source=None,state="vacant",project=None,sources=[])
+                    parcel.pop("reservedAt",None)
+                    self.world.vacant.setdefault(parcel["district"],set()).add(parcel["id"])
+            _,sources,_ = self._normalize(snapshot)
+            quarter_of = {s["id"]:s["quarter"] or neighbourhood(s["project"]) for s in sources}
+            votes = {}
+            for key,block in block_of.items():
+                votes.setdefault(block,Counter())[quarter_of.get(key,"")] += 1
+            for block,count in votes.items():
+                self.world.state["blocks"][block]["neighbourhood"] = min(count,key=lambda q:(-count[q],q))
+            self.state["snapshotVersion"] = None
+            self.emit("quarterRebuilt",project=prefix,sources=len(released),blocks=sorted(votes),reason="Explicit owner request; other quarters unchanged")
+            self.sync(snapshot)
+        except Exception:
+            self.__init__(pickle.loads(before))
+            raise
+        return len(released)
 
     def _normalize(self, snapshot):
         """Validate identities and derive an order-independent source revision."""
@@ -246,6 +304,7 @@ class Simulation:
                 self.emit("sourceMissing",source=key,reason="Retain source memory and parcel; do not demolish neighbours")
         self.state["knowledge"] = [list(edge) for edge in knowledge]
         sync_facilities(self)
+        self.activities.repair_routes()
         self._knowledge_index()
         self.state["snapshotVersion"] = signature
         return True
@@ -451,7 +510,7 @@ class Simulation:
                           if w["kind"] in ("promenade", "bridge-sidewalk", "public-path")],
                 "rivers": world.rivers(), "buildings": buildings,
                 "services": [{"id": s["id"], "function": s["function"], "footprint": s["footprint"], "door": point(s["entrance"])}
-                             | {k:s[k] for k in ("title", "owner", "landmark", "district", "capacity", "hours", "project", "subject", "annexOf") if k in s}
+                             | {k:s[k] for k in ("title", "owner", "landmark", "district", "capacity", "hours", "project", "subject", "annexOf", "wingOf") if k in s}
                              for s in world.state["services"].values() if s["derived"] and s.get("footprint")],
                 "places": [{**{k:s[k] for k in ("id","title","activity","district","owner","capacity","hours","paths")},
                             "position":point(s["entrance"])} for s in world.state["services"].values() if s.get("place")],
@@ -582,7 +641,9 @@ class Simulation:
             parcels = [self.world.state["parcels"][k] for k in block["parcels"]]
             for index,p in enumerate(parcels):
                 for other in parcels[index+1:]:
-                    if convex_overlap(p["polygon"],other["polygon"]):
+                    # Wings share their project building's site; only their buildings must stay apart.
+                    shape = "footprint" if compound(p) and compound(p) == compound(other) else None
+                    if convex_overlap(p[shape]["polygon"] if shape else p["polygon"],other[shape]["polygon"] if shape else other["polygon"]):
                         errors.append(f"Parcel overlap: {p['id']}")
                 for corridor in block["corridors"]:
                     for a,b in zip(corridor["points"],corridor["points"][1:]):
@@ -598,6 +659,9 @@ class Simulation:
                     box = protected["box"]
                     zone = protected.get("polygon") or [[box["x"],box["y"]],[box["x"]+box["w"],box["y"]],[box["x"]+box["w"],box["y"]+box["h"]],[box["x"],box["y"]+box["h"]]]
                     if p["id"] in protected.get("easements",[]) and not convex_overlap(p["footprint"]["polygon"],zone):
+                        continue
+                    host = self.world.state["parcels"].get(protected.get("parcel"))
+                    if host and compound(p) and compound(p) == compound(host) and not convex_overlap(p["footprint"]["polygon"],host["footprint"]["polygon"] if protected["id"] == host["id"] else zone):
                         continue
                     if convex_overlap(p["polygon"],zone):
                         errors.append(f"Protected land occupied: {p['id']}")

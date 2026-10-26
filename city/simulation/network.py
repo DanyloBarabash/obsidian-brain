@@ -152,6 +152,33 @@ class Network:
                 self._routes = {}
         return key
 
+    def prune(self, starts, keep=(), kinds=("public-path", "entrance-path")):
+        """Remove dead-end chains of `kinds` edges up to the first junction or kept node.
+
+        Returns {removed node: surviving node where its chain ended, or None when nothing survived}.
+        """
+        moved = {}
+        for node in starts:
+            chain = []
+            while node in self.state["nodes"] and node not in keep:
+                touching = [k for k,e in self.state["edges"].items() if node in (e["a"], e["b"])]
+                if len(touching) > 1 or (touching and self.state["edges"][touching[0]]["kind"] not in kinds):
+                    break
+                if touching:
+                    edge = self.state["edges"].pop(touching[0])
+                    following = edge["b"] if edge["a"] == node else edge["a"]
+                else:
+                    following = None
+                del self.state["nodes"][node]
+                chain.append(node)
+                node = following
+            for gone in chain:
+                moved[gone] = node if node in self.state["nodes"] else None
+        if moved:
+            self.state["revision"] += 1
+            self._edge_cells = None
+        return moved
+
     def close(self, edge, closed=True):
         """Change access and invalidate route caches without deleting geometry."""
         value = not closed

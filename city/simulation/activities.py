@@ -65,6 +65,31 @@ class Activities:
                 if agent["id"] in service[field]:
                     service[field].remove(agent["id"])
 
+    def repair_routes(self):
+        """Re-plan routes that use an edge the network has since split; walked distance is kept along the same line."""
+        edges = self.world.walk.state["edges"]
+        for agent in self.residents.values():
+            route = agent.get("route")
+            if not route or all(key in edges for key in route["edges"][agent["edge"]:]):
+                continue
+            current = route["edges"][agent["edge"]] if agent["edge"] < len(route["edges"]) else None
+            progress = agent["progress"]
+            new = self.world.walk.route(agent["node"],route["nodes"][-1])
+            if new is None:
+                agent.update(route=None,edge=0,progress=0,state="waiting",reason="path changed; no route",nextDecision=self.clock["tick"]+self._retry())
+                continue
+            agent.update(route=new,edge=0,progress=0)
+            if current in edges and new["edges"][:1] != [current]:
+                continue
+            while agent["edge"] < len(new["edges"]) and progress > 0:
+                length = edges[new["edges"][agent["edge"]]]["length"]
+                if progress < length:
+                    agent["progress"] = progress
+                    break
+                progress -= length
+                agent["edge"] += 1
+                agent["node"] = new["nodes"][agent["edge"]]
+
     def deactivate(self, agent):
         """Suspend only the unavailable source's resident; preserve the home."""
         self.release(agent)
