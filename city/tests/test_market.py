@@ -91,6 +91,51 @@ class MarketTests(unittest.TestCase):
         dropped = self.post("/api/market/link", {"url": "https://other.example/a", "title": "Dropped", "text": "Body"})
         self.assertTrue((self.brain / dropped["note"]).exists())
 
+    def test_liked_articles_shelve_until_taken_into_brain(self):
+        with urlopen(self.base + "/api/market") as response:
+            items = json.load(response)["stalls"][0]["items"]
+        for item in items:
+            self.post("/api/market/act", {"id": item["id"], "action": "like"})
+        with urlopen(self.base + "/api/market/liked") as response:
+            shelf = json.load(response)["items"]
+        self.assertEqual({i["id"] for i in shelf}, {i["id"] for i in items})
+        self.assertEqual(set(shelf[0]), {"id", "url", "title", "about", "summary", "sourceLabel"})
+        self.assertFalse((self.brain / "_global").exists(), "a like alone writes nothing into Brain")
+        self.post("/api/market/act", {"id": items[0]["id"], "action": "save"})
+        with urlopen(self.base + "/api/market/liked") as response:
+            self.assertEqual([i["id"] for i in json.load(response)["items"]], [items[1]["id"]])
+
+    def test_library_shelves_follow_articles_into_brain(self):
+        with urlopen(self.base + "/api/market") as response:
+            pose, bread = sorted(json.load(response)["stalls"][0]["items"], key=lambda i: i["title"])
+        for item in (pose, bread):
+            self.post("/api/market/act", {"id": item["id"], "action": "like"})
+        self.assertEqual(self.post("/api/library/shelve", {"id": pose["id"], "shelf": "Спорт і рух"})["shelf"], "Спорт і рух")
+        self.post("/api/library/shelf", {"name": "Кухня"})
+        self.post("/api/library/shelf", {"name": "Спорт і рух", "class": "sports"})
+        with urlopen(self.base + "/api/library") as response:
+            library = json.load(response)
+        self.assertEqual(library["shelves"], ["Спорт і рух", "Кухня"])
+        self.assertEqual(library["shelfClasses"], {"Спорт і рух": "sports"})
+        with self.assertRaises(HTTPError) as error:
+            self.post("/api/library/shelf", {"name": "Кухня", "class": "Not a class"})
+        self.assertEqual(error.exception.code, 400)
+        self.assertEqual({i["title"]: i["shelf"] for i in library["liked"]}, {pose["title"]: "Спорт і рух", bread["title"]: ""})
+        note = self.post("/api/library/take", {"id": pose["id"]})["note"]
+        self.assertIn('library_shelf: "Спорт і рух"', (self.brain / note).read_text(encoding="utf-8"))
+        self.post("/api/library/shelve", {"path": note, "shelf": "Кухня"})
+        text = (self.brain / note).read_text(encoding="utf-8")
+        self.assertEqual(text.count("library_shelf:"), 1)
+        self.assertIn("Full pose article.", text)
+        with urlopen(self.base + "/api/city") as response:
+            saved = next(n for n in json.load(response)["nodes"] if n["id"] == note)
+        self.assertEqual(saved["libraryShelf"], "Кухня")
+        self.post("/api/library/shelve", {"path": note, "shelf": ""})
+        self.assertNotIn("library_shelf:", (self.brain / note).read_text(encoding="utf-8"))
+        with self.assertRaises(HTTPError) as error:
+            self.post("/api/library/shelve", {"id": bread["id"], "shelf": "bad: name"})
+        self.assertEqual(error.exception.code, 400)
+
     def test_writes_need_same_origin_json_and_known_actions(self):
         for body, origin in (({"id": "x", "action": "save"}, False), ({"url": "https://a.example"}, False)):
             with self.assertRaises(HTTPError) as error:
@@ -109,6 +154,8 @@ class MarketTests(unittest.TestCase):
         self.reader.server_close()
         with urlopen(self.base + "/api/market") as response:
             self.assertTrue(json.load(response)["offline"])
+        with urlopen(self.base + "/api/market/liked") as response:
+            self.assertEqual(json.load(response), {"offline": True, "items": []})
         with self.assertRaises(HTTPError) as error:
             self.post("/api/market/link", {"url": "https://a.example"})
         self.assertEqual(error.exception.code, 503)

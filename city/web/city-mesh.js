@@ -313,6 +313,8 @@
       for(let i=0;i<3;i++){const v=d*(.63+i*.12);P.box(w*.81,v,w*.14,d*.07,8,P.col('#839d96'));P.line([[w*.83,v,8],[w*.83,v,17],[w*.92,v,17],[w*.92,v,8]],P.col('#ccd4ba'),.7);}
       const tu=w*.57,tv=d*.86;P.cylinder(tu,tv,2,0,63,P.col('#b2c7bc'));P.box(tu-2,tv-3,4,5,4,P.col('#dce4d8'),undefined,63);
       for(let i=0;i<3;i++){const a=-Math.PI/2+i*Math.PI*2/3;P.face([[tu,tv+2.2,65],[tu+Math.cos(a)*20,tv+2.2,65+Math.sin(a)*20],[tu+Math.cos(a+.14)*16,tv+2.2,65+Math.sin(a+.14)*16]],P.col('#e1e7db'));}
+    }else if(fn==='knowledge-library'){
+      signatureBuilding(P,{model:'grand-library',seed:o.x|0},day);
     }else if(fn==='article-market'){
       // The article market: a columned hall with a terracotta roof, a glazed lantern and clock cupola, a pedimented
       // entrance with a lit sign, two rows of stalls under striped awnings, bunting across the front and planted corners.

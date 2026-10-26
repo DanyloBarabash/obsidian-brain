@@ -17,7 +17,8 @@ import webbrowser
 from city_state import CityState
 from preparation import Preparation
 from classification import TOPICS, classify, project_profile, reference_data
-from market import READER_URL, Market, ReaderOffline
+from library import Library, shelf_name
+from market import MARKET_LIMIT, READER_URL, Market, ReaderOffline
 
 WEB = Path(__file__).parent / "web"
 # Scenario parameters: smaller bodies gain little from gzip; level 1 keeps a 10 MB world under ~0.1 s.
@@ -74,6 +75,15 @@ def spiral(slot):
     return ring, ring - (delta - 3 * edge)
 
 
+class NoteConflict(Exception):
+    """The note changed on disk since the editor loaded it."""
+
+
+def note_revision(text):
+    """Content hash the editor sends back so a save never overwrites newer text."""
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
 class Vault:
     """Build snapshots while keeping generated layout state outside the vault."""
 
@@ -113,6 +123,31 @@ class Vault:
         if any(parent.is_symlink() for parent in [self.root / path, *(self.root / path).parents] if parent != self.root and parent.is_relative_to(self.root)):
             raise ValueError("Symlinks are excluded")
         return candidate.read_text(encoding="utf-8", errors="replace")
+
+    def write_note(self, path, content, revision):
+        """Replace an existing Markdown note atomically unless it changed since `revision`."""
+        if not isinstance(content, str):
+            raise ValueError("Note content must be text")
+        if note_revision(self.read_note(path)) != revision:
+            raise NoteConflict(path)
+        target = (self.root / path).resolve()
+        temporary = target.with_name(f".{target.name}.city-edit")
+        temporary.write_text(content, encoding="utf-8")
+        os.replace(temporary, target)
+        return note_revision(content)
+
+    def set_shelf(self, path, shelf):
+        """Set or clear `library_shelf` in a note's frontmatter, keeping the rest of the file."""
+        shelf = shelf_name(shelf)
+        text = self.read_note(path)
+        match = re.match(r"\A---\s*\n(.*?)\n---(?:\n|$)", text, re.S)
+        if not match:
+            raise ValueError("Library notes keep their metadata in frontmatter")
+        lines = [line for line in match[1].split("\n") if not line.startswith("library_shelf:")]
+        if shelf:
+            lines.append(f"library_shelf: {json.dumps(shelf, ensure_ascii=False)}")
+        content = "---\n" + "\n".join(lines) + "\n---\n" + text[match.end():]
+        return self.write_note(path, content, note_revision(text))
 
     def read_asset(self, path, note=""):
         """Read a vault illustration while excluding hidden files, symlinks and ambiguous names."""
@@ -307,6 +342,7 @@ class Vault:
 def handler_for(vault, market=None):
     """Create HTTP routes bound to one vault; the only writes are market choices forwarded to the reader."""
     market = market or Market()
+    library = Library(vault.state_file.with_name(vault.state_file.stem + ".library.json"))
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -343,18 +379,34 @@ def handler_for(vault, market=None):
                     self.respond(json.dumps(vault.preparation.live(vault.build()), ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 elif route.path == "/api/market":
                     try:
-                        payload = market.stalls()
+                        limit = int(parse_qs(route.query).get("limit", [MARKET_LIMIT])[0])
+                        payload = market.stalls(limit)
                     except ReaderOffline:
                         payload = {"offline": True, "reader": market.base}
                     self.respond(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                elif route.path == "/api/market/liked":
+                    try:
+                        payload = market.liked()
+                    except ReaderOffline:
+                        payload = {"offline": True, "items": []}
+                    self.respond(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                elif route.path == "/api/library":
+                    try:
+                        liked, offline = market.liked()["items"], False
+                    except ReaderOffline:
+                        liked, offline = [], True
+                    payload = {"shelves": library.shelves(), "shelfClasses": library.classes(), "offline": offline,
+                               "liked": [{**item, "shelf": library.liked_shelf(item["id"])} for item in liked]}
+                    self.respond(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 elif route.path == "/api/note":
                     path = parse_qs(route.query).get("path", [""])[0]
-                    self.respond(json.dumps({"path": path, "content": vault.read_note(path)}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                    content = vault.read_note(path)
+                    self.respond(json.dumps({"path": path, "content": content, "revision": note_revision(content)}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 elif route.path == "/api/asset":
                     query=parse_qs(route.query)
                     content,mime=vault.read_asset(query.get("path",[""])[0],query.get("note",[""])[0])
                     self.respond(content,mime)
-                elif route.path in ("/", "/index.html", "/app.js", "/city-plan.js", "/details.js", "/preparation.js", "/preparation.css", "/style.css", "/market.js", "/city-mesh.js", "/scene3d.js", "/document-reader.js", "/document-reader.css", "/vendor/marked.min.js", "/vendor/purify.min.js", "/vendor/mermaid.min.js", "/vendor/three.module.min.js", "/vendor/OrbitControls.js"):
+                elif route.path in ("/", "/index.html", "/app.js", "/city-plan.js", "/details.js", "/preparation.js", "/preparation.css", "/style.css", "/market.js", "/city-mesh.js", "/scene3d.js", "/document-reader.js", "/document-reader.css", "/library.js", "/library.css", "/vendor/marked.min.js", "/vendor/purify.min.js", "/vendor/mermaid.min.js", "/vendor/three.module.min.js", "/vendor/OrbitControls.js"):
                     name = "index.html" if route.path == "/" else route.path[1:]
                     mime = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[name.rsplit(".", 1)[1]]
                     self.respond((WEB / name).read_bytes(), mime + "; charset=utf-8")
@@ -386,10 +438,31 @@ def handler_for(vault, market=None):
                     result = market.act(body)
                 elif route == "/api/market/link":
                     result = market.link(body)
+                elif route == "/api/library/shelf":
+                    result = {"shelf": library.add_shelf(body["name"], body.get("class"))}
+                elif route == "/api/library/shelve":
+                    # Saved books keep their shelf in Brain; liked articles are not in Brain yet.
+                    if body.get("path"):
+                        vault.set_shelf(body["path"], body["shelf"])
+                        result = {"shelf": library.add_shelf(body["shelf"])}
+                    else:
+                        result = {"shelf": library.shelve_liked(body["id"], body["shelf"])}
+                elif route == "/api/library/take":
+                    result = market.act({"id": body["id"], "action": "save"})
+                    shelf = library.take(body["id"])
+                    if shelf and result.get("note"):
+                        vault.set_shelf(result["note"], shelf)
+                    result["shelf"] = shelf
+                elif route == "/api/note/save":
+                    result = {"revision": vault.write_note(body["path"], body["content"], body["revision"])}
                 else:
                     self.send_error(404)
                     return
                 self.respond(json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            except NoteConflict:
+                self.send_error(409, "Note changed on disk")
+            except FileNotFoundError:
+                self.send_error(404)
             except ReaderOffline:
                 self.send_error(503, "Brain Reader is not running")
             except (KeyError, ValueError, TypeError, AttributeError):

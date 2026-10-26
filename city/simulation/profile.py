@@ -25,6 +25,7 @@ PARAMETERS = {
     "annex_step": parameter(10, "logical metres", "Search step for the next free bay along the complex front"),
     "annex_reach": parameter(360, "logical metres", "Furthest bay from the landmark edge before the complex stops growing"),
     "landmark_growth_band": parameter(80, "logical metres/band", "Fill the nearest feasible band around the complex before expanding outward; roughly one block depth, a scenario policy"),
+    "library_hall_sizes": parameter([[30,20],[28,18],[26,17],[24,16],[22,14],[20,13]], "[length, width] logical metres, largest first", "Reading hall of the Knowledge Library on the civic square, beside the market"),
     "market_hall_sizes": parameter([[34,22],[32,20],[30,18],[28,17],[26,16],[24,15],[20,12]], "[length, width] logical metres, largest first", "Covered article market on the civic square: the largest hall that fits between the square's paths"),
     "civic_hall_size": parameter([26,14], "[length, width] logical metres", "A dedicated European-inspired civic hall that fits between existing square approaches"),
     "apartments_per_house": parameter(8, "source apartments/house", "Bound historical session density within one exact project"),

@@ -155,4 +155,4 @@ def classify(path, meta, owner, source_class, topic="", thematic=False):
             "cityTopic": topic, "cityImportance": rank, "importanceTitle": importance,
             "topicAnchor": meta.get("city_anchor") == "true",
             "ownerProject": owner or "",
-            **({"libraryCategory":meta.get('domain','general'),"librarySource":meta.get('source_url','') if meta.get('source_url','').startswith(('https://','http://')) else ''} if library else {})}
+            **({"libraryCategory":meta.get('domain','general'),"libraryShelf":meta.get("library_shelf",""),"librarySource":meta.get('source_url','') if meta.get('source_url','').startswith(('https://','http://')) else ''} if library else {})}

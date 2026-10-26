@@ -65,9 +65,9 @@ setTimeout(()=>{
   assert.equal(run('state.selected'),null,'dragging the 3D camera does not select a building');
   listeners.pointerdown({clientX:600,clientY:400,pointerId:1});listeners.pointerup({clientX:600,clientY:400});
   assert.equal(run('state.selected.id'),api.state.nodes[10].id,'a click selects the ray-picked source');
-  elements['open-library'].onclick();assert(cameraCalls.includes('node'));
-  assert.equal(elements['units-title'].textContent,'КАТАЛОГ · МАТЕРІАЛІВ: 1');assert.equal(elements['apartment-panel'].hidden,false);
-  elements['apartment-units'].children[0].onclick();assert.equal(elements['library-source'].href,'https://example.org/article');assert.equal(elements['library-source'].hidden,false);
+  let libraryOpened=0;sandbox.openLibrary=()=>{libraryOpened++;};
+  elements['open-library'].onclick();assert(cameraCalls.includes('node'));assert.equal(libraryOpened,1,'the library button opens the library room');
+  run("select(state.nodes.find(n=>n.cityRole==='library-item'))");assert.equal(elements['library-source'].href,'https://example.org/article');assert.equal(elements['library-source'].hidden,false);
   assert(requests.some(([u])=>u.startsWith('/api/note?path=')),'source selection fetches the saved note');
   const html=fs.readFileSync(path.join(root,'web/index.html'),'utf8');assert(!html.includes('toggle-3d')&&!html.includes('/details.js'),'there is no mode switch or legacy renderer script');
   sandbox.WebGL2RenderingContext=undefined;

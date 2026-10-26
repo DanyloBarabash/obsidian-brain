@@ -453,7 +453,7 @@ class World:
             self._street_piece(("arc", 1, t0, t1), ["plaza", (1, s)])
         self.emit("plazaFounded", reason="Civic square and town hall at the origin of the radial roads")
 
-    def _new_block(self, source, tick):
+    def _new_block(self, source, tick, connected=True):
         """Choose feasible serviced boundary land, lay its streets, then parcels and courtyard."""
         district = source.get("sourceClass", source["district"])
         centre = self.state["centres"].get(district)
@@ -472,7 +472,7 @@ class World:
             envelope = aabb(self.cell_polygon(*cell, steps=4))
             if self.water(*cell) or any(overlaps(envelope, zone["box"]) for zone in zones):
                 continue
-            if centre and not any(self.state["blocks"].get(f"block:{c[0]}:{c[1]}", {}).get("district") == district for c in self.cluster_neighbours(cell)):
+            if connected and centre and not any(self.state["blocks"].get(f"block:{c[0]}:{c[1]}", {}).get("district") == district for c in self.cluster_neighbours(cell)):
                 continue
             if quarter_cells and not (self.cluster_neighbours(cell) & quarter_cells):
                 continue
@@ -516,6 +516,9 @@ class World:
             band = int(gap // VALUES["landmark_growth_band"])
             candidates.append((band, score, stable_hash(f"{district}:{cell[0]}:{cell[1]}"), cell))
         if not candidates:
+            # A class enclosed by its neighbours grows on the nearest free land of its own wedge.
+            if connected:
+                return self._new_block(source, tick, connected=False)
             raise ValueError("No connected feasible land; protected land was preserved")
         candidates.sort()
         i, s = candidates[0][3]

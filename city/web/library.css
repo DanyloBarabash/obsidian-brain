@@ -1,0 +1,51 @@
+#library-room{--paper:#1d302e;--ink:#e3e7d9;--quiet:#a0b4a8;--rule:#b9d0b426;--wash:#b9d0b409;--accent-ink:#c5dcb1;--wood:#6b4a33;--wood-edge:#4a3223;--wall:#16262a;position:fixed;inset:28px;width:min(1320px,calc(100vw - 56px));height:calc(100dvh - 56px);max-width:none;max-height:none;margin:auto;padding:0;border:1px solid #b8d2c338;border-radius:20px;background:var(--paper);color:var(--ink);box-shadow:0 35px 120px #0009;overflow:hidden;z-index:19}
+body.day #library-room{--paper:#f5f2e8;--ink:#2c4038;--quiet:#6a7d6c;--rule:#36574426;--wash:#36574408;--accent-ink:#476b46;--wood:#a77b53;--wood-edge:#7d5636;--wall:#ebe4d2;border-color:#d6ddcc}
+#library-room::backdrop{background:#0b1416a8;backdrop-filter:blur(3px)}
+#library-room[open]{display:flex;flex-direction:column}
+.library-top{display:flex;align-items:center;gap:18px;padding:14px 22px;border-bottom:1px solid var(--rule)}
+.library-brand{font-size:11px;letter-spacing:.18em;color:var(--quiet);white-space:nowrap}
+.library-tabs{display:flex;gap:6px;flex:1}
+.library-tabs button,.library-top .library-close{padding:8px 14px;border:1px solid var(--rule);border-radius:8px;background:none;color:var(--quiet);font-size:12px;cursor:pointer}
+.library-tabs button[aria-selected="true"]{background:var(--wash);color:var(--ink);border-color:var(--accent-ink)}
+.library-body{flex:1;display:flex;min-height:0}
+.library-main{flex:1;overflow:auto;padding:24px 30px}
+.library-about{max-width:760px;font-size:13px;line-height:1.75}
+.library-tiles{display:flex;gap:12px;margin:0 0 22px}
+.library-tile{flex:1;padding:14px 16px;border:1px solid var(--rule);border-radius:12px;background:var(--wash);text-align:left;color:var(--ink);cursor:pointer}
+.library-tile b{display:block;font-size:26px;font-weight:600}.library-tile span{font-size:11px;color:var(--quiet)}
+.library-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;color:var(--quiet);font-size:12px}
+.library-toolbar form{display:flex;gap:6px;margin-left:auto}
+.library-toolbar input,.library-card input{padding:7px 10px;border:1px solid var(--rule);border-radius:7px;background:var(--wash);color:var(--ink);font-size:12px}
+.library-toolbar button,.library-card button{padding:7px 12px;border:1px solid var(--rule);border-radius:7px;background:none;color:var(--ink);font-size:12px;cursor:pointer}
+.library-shelf{margin-bottom:26px}
+.shelf-head{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.12em;color:var(--quiet);margin:0 4px 6px;text-transform:uppercase}
+.shelf-head{align-items:center;gap:10px}.shelf-head span:first-child{flex:1}.shelf-head select{padding:3px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--wash);color:var(--quiet);font-size:11px;letter-spacing:0;text-transform:none}
+.library-board{display:flex;align-items:flex-end;gap:16px;min-height:206px;padding:18px 18px 0;background:var(--wall);border-radius:8px 8px 0 0;overflow-x:auto;border-bottom:14px solid var(--wood);box-shadow:0 6px 0 var(--wood-edge),inset 0 10px 18px #0003}
+.library-shelf.drop .library-board{outline:2px dashed var(--accent-ink);outline-offset:3px}
+.library-board:has(.library-empty){min-height:64px}
+.library-empty{align-self:center;color:var(--quiet);font-size:12px;padding-bottom:18px}
+.library-book{--c:#8c5a45;position:relative;flex:none;display:flex;flex-direction:column;width:124px;height:176px;padding:14px 12px 12px 18px;border:0;border-radius:3px 7px 7px 3px;text-align:left;cursor:pointer;color:#f8f0dc;
+  background:linear-gradient(150deg,color-mix(in srgb,var(--c) 68%,#1d1610),color-mix(in srgb,var(--c) 40%,#0b0907));
+  box-shadow:inset 7px 0 0 #0000003d,inset 8px 0 0 #ffffff14,0 6px 10px #0005;transition:transform .18s,box-shadow .18s}
+.library-book::before{content:"";position:absolute;inset:7px 7px 7px 13px;border:1px solid #f6e5bd59;border-radius:2px;pointer-events:none}
+.library-book.cover-1::before{border-width:3px;border-style:double}
+.library-book.cover-2::before{border:0;border-top:2px solid #f6e5bd66;border-bottom:2px solid #f6e5bd66;inset:30px 7px 30px 13px}
+.library-book:hover{transform:translateY(-7px) rotate(-1.2deg);box-shadow:inset 7px 0 0 #0000003d,inset 8px 0 0 #ffffff14,0 14px 18px #0006}
+.library-book.active{outline:2px solid var(--accent-ink);outline-offset:3px;transform:translateY(-7px)}
+.book-emblem{font-size:15px;line-height:1;color:color-mix(in srgb,var(--c) 45%,#fff3d4);margin-bottom:9px}
+.book-title{font:600 12.5px/1.28 "Iowan Old Style","Palatino Linotype",Georgia,serif;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;hyphens:auto;text-shadow:0 1px 1px #0006}
+.book-source{margin-top:auto;font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.library-card{width:340px;flex:none;overflow:auto;padding:24px;border-left:1px solid var(--rule);background:var(--wash)}
+.library-card h3{margin:6px 0 4px;font-size:17px;line-height:1.35}
+.library-card .meta{font-size:11px;color:var(--quiet);margin-bottom:12px}
+.library-card p{font-size:12px;line-height:1.7}
+.library-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
+.library-chips button{padding:5px 10px;border-radius:999px;font-size:11px}
+.library-chips button[aria-pressed="true"]{border-color:var(--accent-ink);color:var(--accent-ink);background:var(--wash)}
+.library-actions{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.library-actions .primary{border-color:var(--accent-ink);color:var(--accent-ink)}
+.library-hint{color:var(--quiet);font-size:12px;line-height:1.6}
+.shelf-picker{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:11px;color:var(--muted)}
+.shelf-picker button{padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--text);font-size:11px;cursor:pointer}
+.shelf-picker input{width:110px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:var(--soft);color:var(--text);font-size:11px}
+@media (max-width:860px){#library-room{inset:8px;width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:12px}.library-body{flex-direction:column}.library-card{width:auto;border-left:0;border-top:1px solid var(--rule)}.library-top{flex-wrap:wrap}}

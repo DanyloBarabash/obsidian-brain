@@ -167,6 +167,24 @@ class ProjectDistrictTests(unittest.TestCase):
             self.assertIn("plaza:market",model.activities._landmarks("anything"),"every quarter can visit the market")
             self.assertEqual(model.audit(),[])
 
+    def test_knowledge_library_reads_on_the_civic_square(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/"vault";root.mkdir()
+            self.hub(root,"projects/sports.md","Спортивний центр","city_topic: sports\n")
+            (root/"_global").mkdir()
+            (root/"_global/library.md").write_text("---\ntype: hub\nknowledge_scope: library\ncity_role: knowledge-library\n---\n# Бібліотека знань\n",encoding="utf-8")
+            model=Simulation();model.sync(Vault(root,Path(directory)/"state").build());model.advance(100)
+            world=model.world;hall=world.state["services"]["plaza:library"]
+            owner=next(k for k,s in model.state["sources"].items() if s.get("cityRole")=="knowledge-library")
+            self.assertEqual((hall["function"],hall["owner"]),("knowledge-library",owner))
+            self.assertTrue(all(math.hypot(x,y)<VALUES["plaza_radius"] for x,y in hall["footprint"]["polygon"]),"the library stands on the square")
+            others=[b["footprint"]["polygon"] for b in model.state["buildings"].values()]+[s["footprint"]["polygon"] for k,s in world.state["services"].items() if k!="plaza:library" and s.get("footprint")]
+            self.assertTrue(all(not convex_overlap(hall["footprint"]["polygon"],o) for o in others))
+            self.assertIsNotNone(world.walk.route(world.state["services"]["plaza:town-hall"]["entrance"],hall["entrance"]))
+            self.assertEqual(model.state["buildings"][owner]["model"],"archive","the first library building stays on as the stacks")
+            self.assertIn("plaza:library",model.activities._landmarks("anything"))
+            self.assertEqual(model.audit(),[])
+
     def test_reference_data_documents_farm_fields(self):
         from classification import reference_data
         doc = "projects/team/sdk/assets/documents/sprint.md"

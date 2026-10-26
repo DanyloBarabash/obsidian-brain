@@ -470,6 +470,38 @@ def town_hall(model):
 MARKET_SITE_VERSION = 3
 
 
+def plaza_site(model, identity, sizes):
+    """First free site on the civic square between its paths: (centre, along, inward, width, depth, polygon) or None."""
+    world = model.world
+    pavilion = world.state["services"]["plaza:town-hall"]
+    existing = world.state["services"].get(identity)
+    nodes = world.walk.state["nodes"]
+    hub = pavilion["entrance"]
+    approaches = [e for e in world.walk.state["edges"].values() if e["kind"]=="plaza-path" and hub in (e["a"],e["b"])]
+    angles = sorted(math.atan2(nodes[e["b"] if e["a"]==hub else e["a"]]["y"],nodes[e["b"] if e["a"]==hub else e["a"]]["x"])%(2*math.pi) for e in approaches)
+    if not angles:
+        return None
+    own = existing["entrance"] if existing else None
+    path_segments = [[[nodes[e["a"]]["x"],nodes[e["a"]]["y"]],[nodes[e["b"]]["x"],nodes[e["b"]]["y"]]] for e in world.walk.state["edges"].values() if own not in (e["a"],e["b"])]
+    bodies = [v["footprint"]["polygon"] for v in model.state["buildings"].values()]
+    bodies += [s["footprint"]["polygon"] for k,s in world.state["services"].items() if s.get("footprint") and k != identity]
+    gaps = [(a,angles[(i+1)%len(angles)]+(2*math.pi if i==len(angles)-1 else 0)) for i,a in enumerate(angles)]
+    sites = [((a+b)/2,f,size) for size in sizes for a,b in sorted(gaps,key=lambda p:p[0]-p[1]) for f in (.6,.64,.68,.72,.56,.52)]
+    for angle,fraction,(width,depth) in sites:
+        inward = (-math.cos(angle),-math.sin(angle))
+        along = (-inward[1],inward[0])
+        centre = (-inward[0]*VALUES["plaza_radius"]*fraction,-inward[1]*VALUES["plaza_radius"]*fraction)
+        polygon,_ = oriented_rect(centre,along,inward,width,depth)
+        if any(math.hypot(x,y) > VALUES["plaza_radius"] for x,y in polygon):
+            continue
+        if any(convex_overlap(polygon,p) for p in path_segments) or any(convex_overlap(polygon,p) for p in bodies):
+            continue
+        if any(polygon_segment_distance(polygon,a,b)<c["half"] for block in world.state["blocks"].values() for c in block["corridors"] for a,b in zip(c["points"],c["points"][1:])):
+            continue
+        return centre, along, inward, width, depth, polygon
+    return None
+
+
 def market_hall(model):
     """Open the covered article market on the civic square: the largest hall that fits a free gap between its paths.
 
@@ -482,51 +514,65 @@ def market_hall(model):
         return None
     if not existing and model.state["budget"]["available"] < VALUES["landmark_site_cost"]:
         return None
-    nodes = world.walk.state["nodes"]
-    hub = pavilion["entrance"]
-    approaches = [e for e in world.walk.state["edges"].values() if e["kind"]=="plaza-path" and hub in (e["a"],e["b"])]
-    angles = sorted(math.atan2(nodes[e["b"] if e["a"]==hub else e["a"]]["y"],nodes[e["b"] if e["a"]==hub else e["a"]]["x"])%(2*math.pi) for e in approaches)
-    if not angles:
+    site = plaza_site(model, "plaza:market", VALUES["market_hall_sizes"])
+    if site is None:
         return None
-    own = existing["entrance"] if existing else None
-    path_segments = [[[nodes[e["a"]]["x"],nodes[e["a"]]["y"]],[nodes[e["b"]]["x"],nodes[e["b"]]["y"]]] for e in world.walk.state["edges"].values() if own not in (e["a"],e["b"])]
-    bodies = [v["footprint"]["polygon"] for v in model.state["buildings"].values()]
-    bodies += [s["footprint"]["polygon"] for k,s in world.state["services"].items() if s.get("footprint") and k != "plaza:market"]
-    gaps = [(a,angles[(i+1)%len(angles)]+(2*math.pi if i==len(angles)-1 else 0)) for i,a in enumerate(angles)]
-    sites = [((a+b)/2,f,size) for size in VALUES["market_hall_sizes"] for a,b in sorted(gaps,key=lambda p:p[0]-p[1]) for f in (.6,.64,.68,.72,.56,.52)]
-    for angle,fraction,(width,depth) in sites:
-        inward = (-math.cos(angle),-math.sin(angle))
-        along = (-inward[1],inward[0])
-        centre = (-inward[0]*VALUES["plaza_radius"]*fraction,-inward[1]*VALUES["plaza_radius"]*fraction)
-        polygon,_ = oriented_rect(centre,along,inward,width,depth)
-        if any(math.hypot(x,y) > VALUES["plaza_radius"] for x,y in polygon):
-            continue
-        if any(convex_overlap(polygon,p) for p in path_segments) or any(convex_overlap(polygon,p) for p in bodies):
-            continue
-        if any(polygon_segment_distance(polygon,a,b)<c["half"] for block in world.state["blocks"].values() for c in block["corridors"] for a,b in zip(c["points"],c["points"][1:])):
-            continue
-        entrance = world.walk.node(*(centre[i]+inward[i]*depth/2 for i in (0,1)))
-        world.walk.edge(hub,entrance,kind="entrance-path",width=5)
-        from .migrations import pedestrian_junctions
-        pedestrian_junctions(model.state,world.walk)
-        footprint = {**aabb(polygon),"polygon":polygon,"cx":centre[0],"cy":centre[1],"fw":width,"fd":depth,"angle":math.atan2(along[1],along[0])}
-        service = {"id":"plaza:market","derived":True,"source":None,"owner":pavilion["owner"],"district":pavilion["district"],"block":pavilion["block"],
-                   "function":"article-market","title":"Ринок статей","landmark":True,"publicMarket":True,"footprint":footprint,"entrance":entrance,
-                   "capacity":VALUES["service_capacity"],"hours":list(VALUES["activity_hours"]["work"]),"enabled":True,
-                   "occupants":[],"reservations":[],"queue":[],"state":"open","createdAt":model.clock["tick"],"siteVersion":MARKET_SITE_VERSION,
-                   "reason":"The article market opens on the civic square; every quarter can visit it"}
-        if existing:
-            # Visitors keep their claims; anyone walking to the old door continues to the new one.
-            for field in ("occupants","reservations","queue"):
-                service[field] = existing[field]
-            service["createdAt"] = existing["createdAt"]
-            for agent in model.state["residents"].values():
-                if agent.get("goal") == "plaza:market" and agent["state"] == "walking":
-                    model.activities._walk_to(agent,entrance)
-        else:
-            model.state["budget"]["available"] -= VALUES["landmark_site_cost"]
-            model.state["budget"]["spent"] += VALUES["landmark_site_cost"]
-        world.state["services"]["plaza:market"] = service
-        model.emit("marketHallOpened" if not existing else "marketHallEnlarged",facility="plaza:market",size=[width,depth],reason=service["reason"])
-        return service
-    return None
+    centre, along, inward, width, depth, polygon = site
+    hub = pavilion["entrance"]
+    entrance = world.walk.node(*(centre[i]+inward[i]*depth/2 for i in (0,1)))
+    world.walk.edge(hub,entrance,kind="entrance-path",width=5)
+    from .migrations import pedestrian_junctions
+    pedestrian_junctions(model.state,world.walk)
+    footprint = {**aabb(polygon),"polygon":polygon,"cx":centre[0],"cy":centre[1],"fw":width,"fd":depth,"angle":math.atan2(along[1],along[0])}
+    service = {"id":"plaza:market","derived":True,"source":None,"owner":pavilion["owner"],"district":pavilion["district"],"block":pavilion["block"],
+               "function":"article-market","title":"Ринок статей","landmark":True,"publicMarket":True,"footprint":footprint,"entrance":entrance,
+               "capacity":VALUES["service_capacity"],"hours":list(VALUES["activity_hours"]["work"]),"enabled":True,
+               "occupants":[],"reservations":[],"queue":[],"state":"open","createdAt":model.clock["tick"],"siteVersion":MARKET_SITE_VERSION,
+               "reason":"The article market opens on the civic square; every quarter can visit it"}
+    if existing:
+        # Visitors keep their claims; anyone walking to the old door continues to the new one.
+        for field in ("occupants","reservations","queue"):
+            service[field] = existing[field]
+        service["createdAt"] = existing["createdAt"]
+        for agent in model.state["residents"].values():
+            if agent.get("goal") == "plaza:market" and agent["state"] == "walking":
+                model.activities._walk_to(agent,entrance)
+    else:
+        model.state["budget"]["available"] -= VALUES["landmark_site_cost"]
+        model.state["budget"]["spent"] += VALUES["landmark_site_cost"]
+    world.state["services"]["plaza:market"] = service
+    model.emit("marketHallOpened" if not existing else "marketHallEnlarged",facility="plaza:market",size=[width,depth],reason=service["reason"])
+    return service
+
+
+def library_hall(model):
+    """Open the Knowledge Library's reading hall on the civic square; its first building stays on as the stacks."""
+    world = model.world
+    pavilion = world.state["services"].get("plaza:town-hall")
+    if not pavilion or "plaza:library" in world.state["services"]:
+        return None
+    owner = next((key for key,s in sorted(model.state["sources"].items()) if s.get("cityRole") == "knowledge-library" and s["available"]), None)
+    if owner is None or model.state["budget"]["available"] < VALUES["landmark_site_cost"]:
+        return None
+    site = plaza_site(model, "plaza:library", VALUES["library_hall_sizes"])
+    if site is None:
+        return None
+    centre, along, inward, width, depth, polygon = site
+    entrance = world.walk.node(*(centre[i]+inward[i]*depth/2 for i in (0,1)))
+    world.walk.edge(pavilion["entrance"],entrance,kind="entrance-path",width=5)
+    from .migrations import pedestrian_junctions
+    pedestrian_junctions(model.state,world.walk)
+    footprint = {**aabb(polygon),"polygon":polygon,"cx":centre[0],"cy":centre[1],"fw":width,"fd":depth,"angle":math.atan2(along[1],along[0])}
+    service = {"id":"plaza:library","derived":True,"source":None,"owner":owner,"district":pavilion["district"],"block":pavilion["block"],
+               "function":"knowledge-library","title":"Бібліотека знань","landmark":True,"publicLibrary":True,"footprint":footprint,"entrance":entrance,
+               "capacity":VALUES["service_capacity"],"hours":list(VALUES["activity_hours"]["work"]),"enabled":True,
+               "occupants":[],"reservations":[],"queue":[],"state":"open","createdAt":model.clock["tick"],
+               "reason":"The Knowledge Library reads on the civic square; every quarter can visit it"}
+    model.state["budget"]["available"] -= VALUES["landmark_site_cost"]
+    model.state["budget"]["spent"] += VALUES["landmark_site_cost"]
+    world.state["services"]["plaza:library"] = service
+    stacks = model.state["buildings"].get(owner)
+    if stacks and stacks["model"] == "grand-library":
+        stacks["model"] = "archive"
+    model.emit("libraryHallOpened",facility="plaza:library",size=[width,depth],reason=service["reason"])
+    return service

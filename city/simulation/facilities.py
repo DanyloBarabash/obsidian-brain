@@ -4,7 +4,7 @@ from copy import deepcopy
 import math
 
 from .profile import VALUES
-from .landmarks import annex, market_hall, town_hall, upgrade, wing
+from .landmarks import annex, library_hall, market_hall, town_hall, upgrade, wing
 from .precincts import sync as sync_precincts
 
 
@@ -26,6 +26,7 @@ def sync_facilities(model):
     """Reserve at most one non-source landmark for each explicitly themed district."""
     town_hall(model)
     market_hall(model)
+    library_hall(model)
     themes = dict(FACILITIES)
     for source in model.state["sources"].values():
         if source.get("topic") and source["class"] == source["topic"] and source["available"]:

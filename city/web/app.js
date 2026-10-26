@@ -42,18 +42,28 @@ function renderResults(){
 }
 function noteButton(n){const b=document.createElement('button');b.className='result';b.append(document.createTextNode(n.title));const small=document.createElement('small');small.textContent=n.derived?'Спільна служба району':n.available===false?'Джерело недоступне · адресу збережено':`${n.cityRole==='knowledge-library'?'Каталог бібліотеки':n.knowledgeScope==='library'?`${kinds[n.kind]||'Матеріал'} · ${libraryCategories[n.libraryCategory]||n.libraryCategory||'Загальне'}`:n.unit?`Квартира ${n.unit}`:n.cityRoleTitle||kinds[n.kind]||'Нотатка'} · ${n.degree} зв’язків`;b.append(small);b.onclick=()=>{focusNode(n);select(n);};return b;}
 function selectFacility(n){
+  if(n.function==='knowledge-library'){openLibrary();return;}
   if(n.function==='market'&&typeof openMarket==='function'){openMarket();return;}
   closeHistory();$('district-panel').hidden=true;++noteRequest;state.selected=n;$('inspector').hidden=false;$('apartment-panel').hidden=true;$('library-source').hidden=true;
   $('note-kind').textContent='СПІЛЬНА ІНФРАСТРУКТУРА';$('note-title').textContent=n.title;$('note-path').textContent='Служба району';
   const d=state.districts.find(d=>d.id===n.district),owner=state.byNode.get(n.owner);
   $('note-district').textContent=d?.title||n.district;$('note-district').style.color=d?.color||'#b7c5d1';
   $('note-metrics').textContent=`Місткість: ${n.capacity} · відкрито ${n.hours[0]}:00–${n.hours[1]}:00`;
-  $('read-document').hidden=true;$('note-history').textContent=owner?`Пов’язаний проєкт: ${owner.title}`:'';$('open-obsidian').hidden=true;
+  $('read-document').hidden=true;$('note-history').textContent=owner?`Пов’язаний проєкт: ${owner.title}`:'';
   $('note-content').textContent=n.activity?'Відкритий простір району. Мешканці приходять сюди пішки або транспортом; кожен відвідувач має окреме місце.':'Спільний об’єкт тематичного району. Має власну зарезервовану ділянку та пішохідний вхід. Кількість нотаток і мешканців не змінює.';
   $('note-links').replaceChildren(...(owner?[noteButton(owner)]:[]));$('link-count').textContent=owner?'1':'0';showTab('content');
+  // A project's own building describes the project from its hub note.
+  if(n.project&&owner&&owner.available!==false){
+    $('note-kind').textContent='СПОРУДА ПРОЄКТУ';$('note-path').textContent=owner.id;$('read-document').hidden=false;$('read-document').disabled=false;
+    $('note-content').textContent='Відкриваємо опис проєкту…';const request=noteRequest;
+    fetch(`/api/note?path=${encodeURIComponent(owner.id)}`).then(res=>{if(!res.ok)throw Error();return res.json();}).then(note=>{if(request!==noteRequest)return;
+      if(typeof CityReader!=='undefined')CityReader.render($('note-content'),note.content,owner,{compact:true});else $('note-content').textContent=note.content.replace(/^---\s*\n[\s\S]*?\n---\s*\n/,'').trim();
+    }).catch(()=>{if(request===noteRequest)$('note-content').textContent='Опис проєкту зараз недоступний.';});
+  }
 }
 async function select(n){
   if(n.derived){selectFacility(n);return;}
+  if(n.cityRole==='knowledge-library'&&n.available!==false){openLibrary();return;}
   closeHistory();$('district-panel').hidden=true;
   state.selected=n;$('inspector').hidden=false;$('note-title').textContent=n.title;$('note-kind').textContent=n.cityRoleTitle||kinds[n.kind]||'Нотатка';$('note-path').textContent=n.sourcePath||n.id;
   const library=n.model==='grand-library',units=(library?state.nodes.filter(item=>item.cityRole==='library-item'):(n.members||[]).map(id=>state.byId.get(id)).filter(Boolean)).sort((a,b)=>library?a.title.localeCompare(b.title):(a.unit||0)-(b.unit||0));
@@ -65,8 +75,8 @@ async function select(n){
   const d=state.districts.find(d=>d.id===n.district);$('note-district').textContent=`${icons[d.theme]} ${d.title}`;$('note-district').style.color=d.color;
   $('note-metrics').textContent=n.available===false?'Джерело недоступне · будинок збережено':`${n.words.toLocaleString('uk')} слів · ${n.degree} зв’язків · ${new Date(n.modified*1000).toLocaleDateString('uk')}`;
   $('note-history').textContent=(n.project?`Проєкт: ${state.byId.get(n.project)?.title||n.project}. `:'')+(n.cityTopic?`Тема: ${d.title}. `:'')+(n.cityDistrict==='civic'?'Міська служба; належність і зв’язки джерела збережені. ':'')+(n.history?`Вперше помічено ${new Date(n.history.firstSeen*1000).toLocaleDateString('uk')}. Дата спорудження невідома.${CityPlan.ERAS[n.appearance?.era]?` Епоха: ${CityPlan.ERAS[n.appearance.era].title} (${new Date(n.appearance.bornAt*1000).toLocaleDateString('uk',{month:'long',year:'numeric'})}).`:''}${n.archived?' Архівна нотатка; будинок збережено.':''}${!n.cityTopic&&n.cityDistrict!=='civic'&&n.sourceClass&&n.sourceClass!==n.district?' Клас нотатки змінено; міська адреса залишилася сталою.':''}`:'');
-  $('read-document').hidden=n.available===false;$('read-document').disabled=false;$('open-obsidian').hidden=n.available===false;
-  $('open-obsidian').href=n.uri;$('link-count').textContent=n.degree;$('note-content').textContent='Відкриваємо нотатку…';$('note-links').replaceChildren();
+  $('read-document').hidden=n.available===false;$('read-document').disabled=false;
+  $('link-count').textContent=n.degree;$('note-content').textContent='Відкриваємо нотатку…';$('note-links').replaceChildren();
   const links=state.data.edges.filter(e=>e.includes(n.id)).map(e=>state.byId.get(e.find(id=>id!==n.id))).filter(Boolean);
   links.sort((a,b)=>a.title.localeCompare(b.title)).forEach(node=>$('note-links').append(noteButton(node)));
   if(!links.length){const p=document.createElement('p');p.className='empty';p.textContent='Додай [[посилання]] в Obsidian — і тут з’явиться зв’язок із сусідньою нотаткою.';$('note-links').append(p);}
@@ -204,8 +214,9 @@ canvas.addEventListener('dblclick',e=>{const h=hit(e.clientX,e.clientY);if(h?.no
 canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(-e.deltaY*.0012),e.clientX,e.clientY);},{passive:false});
 $('search').addEventListener('input',e=>{state.query=e.target.value.trim().toLocaleLowerCase();renderResults();});
 $('reset-filter').onclick=()=>{closeDistrict();state.filter=null;state.query='';$('search').value='';renderDistricts();renderResults();fit();$('view-label').textContent='Огляд міста';};
-$('open-library').onclick=()=>{const n=state.nodes.find(item=>item.cityRole==='knowledge-library'&&item.available!==false);if(n){state.filter=null;state.query='';$('search').value='';renderDistricts();renderResults();focusNode(n);select(n);}else toast('Бібліотека ще не додана до цього сховища.');};
-$('read-document').onclick=()=>{if(state.selected&&!state.selected.derived&&state.selected.available!==false)CityReader.open(state.selected);};
+$('open-library').onclick=()=>{const n=state.nodes.find(item=>item.cityRole==='knowledge-library'&&item.available!==false);if(n){state.filter=null;state.query='';$('search').value='';renderDistricts();renderResults();const hall=state.urban?.scenery.find(o=>o.kind==='service'&&o.function==='knowledge-library');if(hall)focusFacility(hall);else focusNode(n);openLibrary();}else toast('Бібліотека ще не додана до цього сховища.');};
+addEventListener('city-note-saved',()=>{if(state.selected)select(state.selected);});
+$('read-document').onclick=()=>{const s=state.selected,n=s?.derived?(s.project?state.byNode.get(s.owner):null):s;if(n&&n.available!==false)CityReader.open(n);};
 if(typeof CityReader!=='undefined')CityReader.configure({nodes:()=>state.nodes});
 $('close-note').onclick=()=>{closeNote();if(state.filter&&$('district-sections').childElementCount)$('district-panel').hidden=false;};$('close-district').onclick=closeDistrict;$('tab-content').onclick=()=>showTab('content');$('tab-links').onclick=()=>showTab('links');
 $('close-history').onclick=closeHistory;$('toggle-history').onclick=()=>{const open=$('city-history').hidden;closeNote();if(typeof closePreparation==='function')closePreparation();$('city-history').hidden=!open;$('toggle-history').setAttribute('aria-pressed',String(open));};

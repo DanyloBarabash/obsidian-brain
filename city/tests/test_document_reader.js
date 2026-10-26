@@ -1,5 +1,5 @@
 'use strict';
-// DOM integration: run with jsdom on NODE_PATH; production uses only the bundled browser scripts.
+// DOM integration: needs jsdom from `npm install` in city/; production uses only the bundled browser scripts.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {JSDOM}=require('jsdom'),root=path.join(__dirname,'..');
 const dom=new JSDOM(fs.readFileSync(path.join(root,'web/index.html'),'utf8'),{url:'http://127.0.0.1:8765/',runScripts:'outside-only',pretendToBeVisual:true});
@@ -35,5 +35,14 @@ for(const file of ['vendor/marked.min.js','vendor/purify.min.js','document-reade
   let delayed;w.fetch=url=>new Promise(resolve=>{if(url.includes(encodeURIComponent(a.id)))delayed=resolve;else resolve({ok:true,json:async()=>({content:'# New page'})});});
   const first=w.CityReader.open(a);await w.CityReader.open(b);delayed({ok:true,json:async()=>({content:'# Stale page'})});await first;
   assert.equal($('reader-title').textContent,b.title);assert(body.textContent.includes('New page'));assert(!body.textContent.includes('Stale page'));
-  $('reader-close').click();dom.window.close();console.log('Document reader: tables, callouts, checklists, wiki navigation, code, images, diagrams, sanitization, source view, history and stale-response protection pass.');
+  let posted=null,status=200;w.fetch=async(url,init)=>{if(init?.method==='POST'){posted=JSON.parse(init.body);return {ok:status===200,status,json:async()=>({revision:'r2'})};}return {ok:true,json:async()=>({content:'# New page\n\nOld text',revision:'r1'})};};
+  w.CityReader.open(a);await tick();await tick();
+  $('reader-edit').click();assert(!$('reader-editor').hidden);assert($('reader-body').hidden);assert.equal($('reader-editor').value,'# New page\n\nOld text');
+  $('reader-editor').value='# New page\n\nEdited text';$('reader-close').click();assert($('document-reader').open,'unsaved edits keep the reader open');assert($('reader-status').textContent.includes('незбережені'));
+  status=409;$('reader-save').click();await tick();await tick();assert($('reader-status').textContent.includes('змінився'));assert(!$('reader-editor').hidden,'a conflict keeps the draft');
+  let saved=null;w.addEventListener('city-note-saved',e=>{saved=e.detail.path;});
+  status=200;$('document-reader').dispatchEvent(new w.KeyboardEvent('keydown',{key:'s',metaKey:true}));await tick();await tick();
+  assert.deepEqual(posted,{path:a.id,content:'# New page\n\nEdited text',revision:'r1'});assert($('reader-editor').hidden);assert(body.textContent.includes('Edited text'));assert.equal(saved,a.id);
+  $('reader-edit').click();$('reader-editor').value='discard me';$('reader-edit').click();assert($('reader-editor').hidden);assert(body.textContent.includes('Edited text'));
+  $('reader-close').click();dom.window.close();console.log('Document reader: tables, callouts, checklists, wiki navigation, code, images, diagrams, sanitization, source view, history, stale-response protection and editing with conflict and unsaved-change guards pass.');
 })().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

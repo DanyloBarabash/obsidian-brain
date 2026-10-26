@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/preparation.css">
   <link rel="stylesheet" href="/document-reader.css">
+  <link rel="stylesheet" href="/library.css">
   <script src="/vendor/marked.min.js" defer></script>
   <script src="/vendor/purify.min.js" defer></script>
   <script src="/document-reader.js" defer></script>
@@ -15,6 +16,7 @@
   <script id="city-renderer" type="module" src="/scene3d.js"></script>
   <script src="/preparation.js" defer></script>
   <script src="/market.js" defer></script>
+  <script src="/library.js" defer></script>
 </head>
 <body>
   <canvas id="city" aria-label="Інтерактивне тривимірне місто нотаток. Для навігації клавіатурою скористайся пошуком і списком будівель."></canvas>
@@ -46,7 +48,6 @@
     <section id="apartment-panel" hidden><div class="section-title" id="units-title">СЕСІЇ ЦЬОГО БУДИНКУ</div><div id="apartment-units"></div></section>
     <a id="library-source" class="text-button" hidden target="_blank" rel="noopener noreferrer">Відкрити першоджерело ↗</a>
     <button id="read-document" class="primary">Читати документ <span>↗</span></button>
-    <a id="open-obsidian" class="text-button" href="#">В Obsidian ↗</a>
     <div class="tabs"><button id="tab-content" class="active">Нотатка</button><button id="tab-links">Зв’язки <span id="link-count"></span></button></div>
     <div id="note-content" class="document-prose"></div><div id="note-links" hidden></div>
   </aside>
@@ -87,14 +88,14 @@
   <dialog id="document-reader" aria-labelledby="reader-title">
     <div class="reader-toolbar">
       <span class="reader-brand">◈ <span>ЧИТАЛЬНЯ <small>BRAIN CITY</small></span></span>
-      <div class="reader-actions"><button id="reader-back" aria-label="Попередній документ" disabled>←</button><button id="reader-source" aria-pressed="false">Markdown</button><button id="reader-close" aria-label="Закрити читальню">×</button></div>
+      <div class="reader-actions"><button id="reader-back" aria-label="Попередній документ" disabled>←</button><button id="reader-edit" disabled>Редагувати</button><button id="reader-save" hidden>Зберегти</button><button id="reader-source" aria-pressed="false">Markdown</button><button id="reader-close" aria-label="Закрити читальню">×</button></div>
     </div>
     <div class="reader-progress" aria-hidden="true"><div id="reader-progress-bar"></div></div>
     <div class="reader-layout">
       <nav id="reader-outline" aria-label="Зміст документа"><div class="eyebrow">НА ЦІЙ СТОРІНЦІ</div><div id="reader-toc"></div><div class="reader-flourish">✧<small>Місце для довгих думок.</small></div></nav>
       <div id="reader-scroll" tabindex="0">
         <div class="reader-paper"><div class="reader-kicker" id="reader-kicker"></div><h1 id="reader-title"></h1><div id="reader-meta"></div>
-          <div id="reader-status" role="status"></div><article id="reader-body" class="document-prose"></article><pre id="reader-raw" hidden></pre>
+          <div id="reader-status" role="status"></div><article id="reader-body" class="document-prose"></article><pre id="reader-raw" hidden></pre><textarea id="reader-editor" hidden spellcheck="false" aria-label="Markdown документа"></textarea>
           <footer class="reader-end">◈<span>Ти дійшов до краю цієї думки.</span></footer>
         </div>
       </div>
@@ -102,5 +103,11 @@
     <div id="reader-lightbox" hidden><button id="reader-image-close" aria-label="Закрити ілюстрацію">×</button><div id="reader-image"></div><div class="reader-image-hint">Натисни поза ілюстрацією або Escape, щоб повернутися</div></div>
   </dialog>
   <div id="toast" hidden role="status"></div>
+  <dialog id="library-room" aria-label="Бібліотека знань">
+    <div class="library-top"><span class="library-brand">▤ БІБЛІОТЕКА ЗНАНЬ</span>
+      <div class="library-tabs" role="tablist"><button role="tab" data-tab="about">Про бібліотеку</button><button role="tab" data-tab="liked">Вподобане <span id="library-liked-count"></span></button><button role="tab" data-tab="saved">Взяте в мозок <span id="library-saved-count"></span></button></div>
+      <button id="library-close" class="library-close" aria-label="Закрити бібліотеку">×</button></div>
+    <div class="library-body"><div id="library-main" class="library-main"></div><aside id="library-card" class="library-card" hidden></aside></div>
+  </dialog>
 </body>
 </html>

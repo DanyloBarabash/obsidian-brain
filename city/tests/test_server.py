@@ -89,6 +89,33 @@ class CityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.vault.read_note(path)
 
+    def test_note_edits_save_atomically_and_refuse_stale_or_unsafe_writes(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(self.vault))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        def save(body, origin=base):
+            request = Request(base + "/api/note/save", json.dumps(body).encode(), {"Content-Type": "application/json", "Origin": origin})
+            with urlopen(request) as response:
+                return json.load(response)
+        try:
+            with urlopen(base + "/api/note?path=projects/lab/notes/alpha.md") as response:
+                loaded = json.load(response)
+            saved = save({"path": "projects/lab/notes/alpha.md", "content": "# Alpha\nEdited", "revision": loaded["revision"]})
+            self.assertEqual((self.root / "projects/lab/notes/alpha.md").read_text(), "# Alpha\nEdited")
+            self.assertNotEqual(saved["revision"], loaded["revision"])
+            self.assertEqual([p.name for p in (self.root / "projects/lab/notes").iterdir()], ["alpha.md"])
+            for body, origin, code in ((dict(path="projects/lab/notes/alpha.md", content="stale", revision=loaded["revision"]), base, 409),
+                                       (dict(path="../outside.md", content="x", revision=""), base, 400),
+                                       (dict(path="projects/new.md", content="x", revision=""), base, 404),
+                                       (dict(path="projects/lab/notes/alpha.md", content="x", revision=saved["revision"]), "http://evil.example", 403)):
+                with self.assertRaises(HTTPError) as error:
+                    save(body, origin)
+                self.assertEqual(error.exception.code, code)
+            self.assertEqual((self.root / "projects/lab/notes/alpha.md").read_text(), "# Alpha\nEdited")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_http_reads_and_rejects_foreign_origin(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(self.vault))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
