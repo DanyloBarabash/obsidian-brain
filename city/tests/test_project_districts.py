@@ -165,12 +165,21 @@ class ProjectDistrictTests(unittest.TestCase):
             # No free cell touches a sports block, as when other districts surround the class.
             world.cluster_neighbours=lambda cell:set()
             passes=[];strict=world._new_block
-            world._new_block=lambda src,tick,connected=True:(passes.append(connected),strict(src,tick,connected))[1]
+            world._new_block=lambda src,tick,connected=True,bounded=True:(passes.append((connected,bounded)),strict(src,tick,connected,bounded))[1]
             block=world._new_block(source,0)
-            self.assertEqual(passes,[True,False],"the strict pass finds nothing, the sector pass places the quarter")
+            self.assertEqual(passes,[(True,True),(False,True)],"the strict pass finds nothing, the sector pass places the quarter")
             self.assertEqual(block["district"],"sports")
             a,b=world.cell_ticks(*block["cell"])
             self.assertEqual(wedge_offset((a+b)/2,world.state["wedges"]["sports"]),0,"the quarter stays inside its own sector")
+            # With no free cell left in the sector, the quarter crosses the boundary beside its own blocks.
+            crowded=World(deepcopy(model.world.state),lambda *a,**kw:None)
+            start=crowded.state["wedges"]["sports"][0];crowded.state["wedges"]["sports"]=[start,start+1]
+            passes=[];strict=crowded._new_block
+            crowded._new_block=lambda src,tick,connected=True,bounded=True:(passes.append((connected,bounded)),strict(src,tick,connected,bounded))[1]
+            block=crowded._new_block(source,0)
+            self.assertEqual(passes[:3],[(True,True),(False,True),(True,False)])
+            self.assertEqual(block["district"],"sports")
+            self.assertTrue(any(crowded.state["blocks"].get(f"block:{c[0]}:{c[1]}",{}).get("district")=="sports" for c in crowded.cluster_neighbours(tuple(block["cell"]))),"it stays beside its own class")
 
     def test_article_market_opens_on_the_civic_square(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -26,6 +26,15 @@ COMPRESS_MIN_BYTES = 1024
 COMPRESS_LEVEL = 1
 # Bookmarked page text can be long; the reader itself caps it at 1 MB.
 MARKET_BODY_BYTES = 1024 * 1024
+IDEAS_DIR = "_global/ideas"
+# Seed → growing → project; shelved keeps an idea without pressure to develop it.
+IDEA_LINK = re.compile(r"\[\[(?:_global/ideas/)?(idea-[^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]")
+IDEA_STAGES = ("seed", "growing", "project", "shelved")
+IDEA_MAX_CHARS = 20000
+IDEA_TITLE_CHARS = 80
+IDEA_SUMMARY_CHARS = 220
+IDEA_SLUG_WORDS = 6
+TRANSLIT = dict(zip("абвгґдеєжзиіїйклмнопрстуфхцчшщьюя’'", ["a", "b", "v", "h", "g", "d", "e", "ie", "zh", "z", "y", "i", "i", "i", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "", "iu", "ia", "", ""]))
 THEMES = {
     "civic": ("Міське управління", "#e1c66e", "civic"),
     "systems-and-agents": ("Системи й агенти", "#b6a0ff", "observatory"),
@@ -47,6 +56,13 @@ def frontmatter(text):
     for key, value in re.findall(r"^([\w-]+):[ \t]*(.*)$", match[1], re.M):
         fields[key] = value.strip().strip("\"'")
     return fields, text[match.end():]
+
+
+def idea_slug(title):
+    """Lowercase kebab-case ASCII from a Ukrainian or English title."""
+    latin = "".join(TRANSLIT.get(c, c) for c in title.lower())
+    words = re.findall(r"[a-z0-9]+", latin)[:IDEA_SLUG_WORDS]
+    return "-".join(words) or "idea"
 
 
 def created(meta, stat):
@@ -136,18 +152,65 @@ class Vault:
         os.replace(temporary, target)
         return note_revision(content)
 
-    def set_shelf(self, path, shelf):
-        """Set or clear `library_shelf` in a note's frontmatter, keeping the rest of the file."""
-        shelf = shelf_name(shelf)
+    def set_field(self, path, key, value):
+        """Set or clear one scalar frontmatter field, keeping the rest of the file."""
         text = self.read_note(path)
         match = re.match(r"\A---\s*\n(.*?)\n---(?:\n|$)", text, re.S)
         if not match:
-            raise ValueError("Library notes keep their metadata in frontmatter")
-        lines = [line for line in match[1].split("\n") if not line.startswith("library_shelf:")]
-        if shelf:
-            lines.append(f"library_shelf: {json.dumps(shelf, ensure_ascii=False)}")
+            raise ValueError("The note keeps its metadata in frontmatter")
+        lines = [line for line in match[1].split("\n") if not line.startswith(key + ":")]
+        if value:
+            lines.append(f"{key}: {json.dumps(value, ensure_ascii=False)}")
         content = "---\n" + "\n".join(lines) + "\n---\n" + text[match.end():]
         return self.write_note(path, content, note_revision(text))
+
+    def set_shelf(self, path, shelf):
+        """Set or clear `library_shelf` in a note's frontmatter."""
+        return self.set_field(path, "library_shelf", shelf_name(shelf))
+
+    def ideas(self):
+        """Ideas on the mountain, newest first: path, title, stage, dates, opening line, word count and links to other ideas."""
+        result = []
+        for file in sorted((self.root / IDEAS_DIR).glob("*.md")):
+            path = file.relative_to(self.root).as_posix()
+            meta, body = frontmatter(self.read_note(path))
+            heading = re.search(r"^#\s+(.+)$", body, re.M)
+            lines = [line.strip() for line in body.split("\n") if line.strip() and not line.startswith("#")]
+            result.append({"path": path, "title": meta.get("title") or (heading[1].strip() if heading else file.stem),
+                           "status": meta.get("status") if meta.get("status") in IDEA_STAGES else IDEA_STAGES[0],
+                           "created": meta.get("created") or meta.get("date", ""), "summary": (lines[0] if lines else "")[:IDEA_SUMMARY_CHARS],
+                           "updated": time.strftime("%Y-%m-%d", time.localtime(file.stat().st_mtime)), "words": len(re.findall(r"\w+", "\n".join(lines))),
+                           "links": sorted({f"{IDEAS_DIR}/{name}.md" for name in IDEA_LINK.findall(body) if name != file.stem})})
+        return sorted(result, key=lambda idea: (idea["created"], idea["path"]), reverse=True)
+
+    def add_idea(self, text, now=None):
+        """Write one new idea as `_global/ideas/idea-<date>-<slug>.md`; the first line is its title."""
+        text = str(text or "").strip()
+        if not text or len(text) > IDEA_MAX_CHARS:
+            raise ValueError("An idea needs between 1 and 20 000 characters")
+        first, _, rest = text.partition("\n")
+        title = first.strip().lstrip("#").strip()[:IDEA_TITLE_CHARS]
+        date = time.strftime("%Y-%m-%d", time.localtime(now))
+        folder = self.root / IDEAS_DIR
+        folder.mkdir(parents=True, exist_ok=True)
+        base = f"idea-{date}-{idea_slug(title)}"
+        for attempt in range(1, 100):
+            name = base if attempt == 1 else f"{base}-{attempt}"
+            body = "\n".join(["---", f"id: global/ideas/{name}", "type: idea", f"title: {json.dumps(title, ensure_ascii=False)}",
+                              f"status: {IDEA_STAGES[0]}", f"created: {date}", "knowledge_scope: global", "tags: [idea]",
+                              'related: ["[[_global/ideas]]"]', "---", "", f"# {title}", "", rest.strip(), ""])
+            try:
+                with open(folder / f"{name}.md", "x", encoding="utf-8") as handle:
+                    handle.write(body)
+                return f"{IDEAS_DIR}/{name}.md"
+            except FileExistsError:
+                continue
+        raise ValueError("Too many ideas with this title today")
+
+    def set_idea_stage(self, path, stage):
+        if stage not in IDEA_STAGES or not path.startswith(IDEAS_DIR + "/"):
+            raise ValueError("Unknown idea stage or path")
+        return self.set_field(path, "status", stage)
 
     def read_asset(self, path, note=""):
         """Read a vault illustration while excluding hidden files, symlinks and ambiguous names."""
@@ -396,6 +459,8 @@ def handler_for(vault, market=None):
                     except ReaderOffline:
                         payload = {"offline": True}
                     self.respond(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                elif route.path == "/api/ideas":
+                    self.respond(json.dumps({"ideas": vault.ideas()}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 elif route.path == "/api/library":
                     try:
                         liked, offline = market.liked()["items"], False
@@ -412,7 +477,7 @@ def handler_for(vault, market=None):
                     query=parse_qs(route.query)
                     content,mime=vault.read_asset(query.get("path",[""])[0],query.get("note",[""])[0])
                     self.respond(content,mime)
-                elif route.path in ("/", "/index.html", "/app.js", "/city-plan.js", "/details.js", "/preparation.js", "/preparation.css", "/style.css", "/market.js", "/city-mesh.js", "/scene3d.js", "/document-reader.js", "/document-reader.css", "/library.js", "/library.css", "/vendor/marked.min.js", "/vendor/purify.min.js", "/vendor/mermaid.min.js", "/vendor/three.module.min.js", "/vendor/OrbitControls.js"):
+                elif route.path in ("/", "/index.html", "/app.js", "/city-plan.js", "/details.js", "/preparation.js", "/preparation.css", "/style.css", "/market.js", "/city-mesh.js", "/scene3d.js", "/document-reader.js", "/document-reader.css", "/library.js", "/library.css", "/ideas.js", "/ideas.css", "/mountain-plan.js", "/mountain3d.js", "/vendor/marked.min.js", "/vendor/purify.min.js", "/vendor/mermaid.min.js", "/vendor/three.module.min.js", "/vendor/OrbitControls.js"):
                     name = "index.html" if route.path == "/" else route.path[1:]
                     mime = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[name.rsplit(".", 1)[1]]
                     self.respond((WEB / name).read_bytes(), mime + "; charset=utf-8")
@@ -444,6 +509,10 @@ def handler_for(vault, market=None):
                     result = market.act(body)
                 elif route == "/api/market/link":
                     result = market.link(body)
+                elif route == "/api/ideas":
+                    result = {"path": vault.add_idea(body["text"])}
+                elif route == "/api/ideas/stage":
+                    result = {"revision": vault.set_idea_stage(body["path"], body["stage"])}
                 elif route == "/api/library/shelf":
                     result = {"shelf": library.add_shelf(body["name"], body.get("class"))}
                 elif route == "/api/library/shelve":

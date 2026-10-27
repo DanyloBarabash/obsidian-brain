@@ -55,7 +55,7 @@ function renderShelves(main,kind){
     const shelf=name===LIBRARY_UNSHELVED?'':name,own=books.filter(b=>b.shelf===shelf),section=document.createElement('section');section.className='library-shelf';
     const head=document.createElement('div');head.className='shelf-head';const title=document.createElement('span');title.textContent=name;const count=document.createElement('span');count.className='shelf-count';count.textContent=own.length;head.append(title);
     if(shelf){const select=document.createElement('select');select.setAttribute('aria-label',`Клас полиці ${name}`);
-      for(const [value,label] of [['','без класу'],...state.districts.filter(d=>d.id!=='civic').map(d=>[d.id,d.title])]){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}
+      for(const [value,label] of [['','без класу'],...state.districts.filter(d=>!['civic','ideas'].includes(d.id)).map(d=>[d.id,d.title])]){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}
       select.value=(libraryData.shelfClasses||{})[shelf]||'';
       select.onchange=async()=>{try{await libraryPost('/api/library/shelf',{name:shelf,class:select.value});libraryData.shelfClasses={...libraryData.shelfClasses,[shelf]:select.value};renderLibrary();}catch(error){toast(`Не вдалося змінити клас: ${error.message}`);}};
       head.append(select);}

@@ -117,6 +117,7 @@ Hub memory section budget: **≤ 1 500 tokens**. `/consolidate` moves overflow t
 | `/save-session` | Save goal, decisions, outcomes, open questions; append to hub |
 | `/recall <query>` | Score hub indexes, load top 5 matches, list linked notes |
 | `/note <text>` | Save a condensed note to `notes/` |
+| `/idea <text>` | Save a passing idea to `_global/ideas/` (the Mountain of Ideas) |
 | `/ingest <file\|url>` | Store original, write processed summary with key facts |
 | `/add-vault --root <path>` | Initialize a vault |
 | `/add-vault <name> --class <id>` | Create a classified project and make it active |

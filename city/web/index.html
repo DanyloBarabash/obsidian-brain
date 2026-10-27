@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/preparation.css">
   <link rel="stylesheet" href="/document-reader.css">
   <link rel="stylesheet" href="/library.css">
+  <link rel="stylesheet" href="/ideas.css">
   <script src="/vendor/marked.min.js" defer></script>
   <script src="/vendor/purify.min.js" defer></script>
   <script src="/document-reader.js" defer></script>
@@ -17,6 +18,9 @@
   <script src="/preparation.js" defer></script>
   <script src="/market.js" defer></script>
   <script src="/library.js" defer></script>
+  <script src="/ideas.js" defer></script>
+  <script src="/mountain-plan.js" defer></script>
+  <script type="module" src="/mountain3d.js"></script>
 </head>
 <body>
   <canvas id="city" aria-label="Інтерактивне тривимірне місто нотаток. Для навігації клавіатурою скористайся пошуком і списком будівель."></canvas>
@@ -34,6 +38,7 @@
     <div class="stats"><div><b id="buildings">—</b><span>будівель</span></div><div><b id="population">—</b><span>мешканців</span></div><div><b id="roads">—</b><span>зв’язків</span></div></div>
     <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Знайти місце чи нотатку…" autocomplete="off" aria-label="Пошук нотаток"><kbd>/</kbd></label>
     <button id="open-library" class="result">▤ Бібліотека знань<small>Статті й матеріали поза проєктами</small></button>
+    <button id="open-ideas" class="result">🚂 Потяг до Гори ідей<small>Записати думку, щоб не загубилась</small></button>
     <button id="open-market" class="result">◍ Ринок статей<small id="market-count">Свіжі статті за твоїми вподобаннями</small></button>
     <div class="section-title"><span>РАЙОНИ МІСТА</span><button id="reset-filter" class="text-button">Усі</button></div>
     <nav id="districts" aria-label="Райони"></nav>
@@ -109,5 +114,14 @@
       <button id="library-close" class="library-close" aria-label="Закрити бібліотеку">×</button></div>
     <div class="library-body"><div id="library-main" class="library-main"></div><aside id="library-card" class="library-card" hidden></aside></div>
   </dialog>
+  <dialog id="ideas-room" aria-label="Гора ідей">
+    <canvas id="mountain-3d" aria-hidden="true"></canvas><div id="mountain-labels"></div><nav id="mountain-ladder" aria-label="Стадії на горі"></nav>
+    <div class="ideas-top"><button id="ideas-close" aria-label="Повернутися потягом у місто">🚂 Назад у місто</button><span class="ideas-brand">⛰ ГОРА ІДЕЙ</span><span id="ideas-count"></span><button id="ideas-panel" aria-expanded="true">Сховати ідеї</button></div>
+    <div class="ideas-main">
+      <form id="idea-form"><textarea id="idea-text" placeholder="Що спало на думку? Перший рядок — назва, далі — подробиці. ⌘↵ — записати." aria-label="Нова ідея"></textarea><button id="idea-save" type="submit">Записати ідею</button></form>
+      <div id="ideas-board"></div><div id="ideas-shelved"></div>
+    </div>
+  </dialog>
+  <div id="train-ride" hidden aria-live="polite"><div class="ride-sky"></div><div class="ride-hills"></div><div class="ride-track"><div class="ride-train"><i></i><i></i><i></i></div></div><p id="ride-caption"></p></div>
 </body>
 </html>

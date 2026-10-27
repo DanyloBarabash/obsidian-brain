@@ -22,6 +22,7 @@ TOPICS = {
     "energy": ("Енергетика", "#99d5ad", "garden"),
     "media": ("Медіа й комунікації", "#ddb4c8", "studio"),
     "games": ("Ігри й творчість", "#f396bc", "studio"),
+    "ideas": ("Гора ідей", "#f2c14e", "garden"),
 }
 
 # These are product categories, not scientific or municipal standards.
@@ -112,6 +113,10 @@ def classify(path, meta, owner, source_class, topic="", thematic=False):
     if library:
         scope = 'library'
         role = 'knowledge-library' if path == '_global/library.md' else 'library-item'
+    if not owner and (path == "_global/ideas.md" or path.startswith("_global/ideas/")):
+        role = "idea-mountain" if path == "_global/ideas.md" else "idea"
+        # Ideas are their own district at the city edge, not part of the full civic centre.
+        topic = topic or "ideas"
     if not role:
         if path == "global.md":
             role = "town-hall"
@@ -150,7 +155,8 @@ def classify(path, meta, owner, source_class, topic="", thematic=False):
         raise ValueError(f"Invalid city_topic for {path}: {topic}")
     return {"knowledgeScope": scope, "cityRole": role,
             "cityRoleTitle": CIVIC_ROLES.get(role, {"district-hall": "Районна управа", "headquarters": "Штаб проєкту",
-                "project-council": "Правила проєкту", "project-archive": "Архів проєкту", "library": "Бібліотека", "house": "Дім знань"}.get(role, role)),
+                "project-council": "Правила проєкту", "project-archive": "Архів проєкту", "library": "Бібліотека", "house": "Дім знань",
+                "idea-mountain": "Гора ідей", "idea": "Ідея"}.get(role, role)),
             "cityDistrict": "civic" if civic else topic or source_class,
             "cityTopic": topic, "cityImportance": rank, "importanceTitle": importance,
             "topicAnchor": meta.get("city_anchor") == "true",

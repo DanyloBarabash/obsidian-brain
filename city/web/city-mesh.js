@@ -4,6 +4,8 @@
   // Plan heights of the 2D atlas, so overlays and agents meet the ground where they did before.
   // A project compound's paving sits above the court layer; its buildings stand on it.
   const COMPOUND_LIFT=.55;
+  // At most this many idea flags on the mountain path, so a large collection stays readable.
+  const IDEA_FLAGS=24;
   const Z={terrain:12,shore:13,water:13.4,pad:14,court:14.4,sidewalk:15,carriage:15.2,path:15.1,bridge:17,base:14,lot:14.1,walk:14.2};
   const WINDOW={w:4.2,h:6,first:8,floor:13,spacing:11,top:5,offset:.35,maxFloors:14,maxColumns:10};
   const BRIDGE={rail:7,post:12,pier:45,pierWidth:6};
@@ -112,6 +114,19 @@
       P.face([[w*.43,d*.84+.2,4],[w*.57,d*.84+.2,4],[w*.57,d*.84+.2,19],[w*.5,d*.84+.2,23],[w*.43,d*.84+.2,19]],P.col('#456767'));
       for(const u of [.08,.92]){P.box(w*u-w*.025,d*.75,w*.05,d*.08,31,stone);P.spire(w*u-w*.04,d*.73,w*.08,d*.12,31,8,roof);}
       const books=['#9c6852','#c1a262','#658e8e','#8b6e8a'];for(let i=0;i<7;i++)P.box(w,d*(.12+i*.085),.35,d*.055,4,P.col(books[i%4]),undefined,10);
+      return true;
+    }
+    if(model==='idea-mountain'){
+      // The Mountain of Ideas: grassy and rocky terraces, a winding path, one flag per idea and a beacon on the summit.
+      const cu=w/2,cv=d/2,R=Math.min(w,d)*.5,tiers=7,th=Math.max(3,R*.19),rock=P.col(day?'#8f9a8a':'#56645c'),grass=P.col(day?'#8fae78':'#4d6b4c'),snow=P.col(day?'#f2f0e6':'#c9d2d0');
+      for(let k=0;k<tiers;k++)P.cylinder(cu+Math.sin(k*1.7)*R*.05,cv+Math.cos(k*2.3)*R*.05,R*(1-k*.13),k*th,th,k<3?(k%2?rock:grass):rock,k<3?grass:k>=tiers-2?snow:rock);
+      P.dome(cu,cv,R*.125,tiers*th,snow);
+      const along=t=>{const a=t*Math.PI*4,r=R*(1-t*.85)+.4;return [cu+Math.cos(a)*r,cv+Math.sin(a)*r,t*(tiers-.3)*th+.5];};
+      P.line(Array.from({length:41},(_,i)=>along(i/40)),P.col(day?'#e3d3a8':'#9c9478'),.6);
+      const flags=['#e2654f','#f2c14e','#5fb3c9','#9b7fd4','#7cc47a'],count=Math.min(Math.max(1,n.ideas??(n.members?.length||1)-1),IDEA_FLAGS);
+      for(let i=0;i<count;i++){const [x,y,z]=along((i+1)/(count+1));P.pole(x,y,z,z+7,stone,.25);P.face([[x,y,z+7],[x+3.2,y,z+6],[x,y,z+5]],P.col(flags[i%flags.length]));}
+      const top=tiers*th+R*.125;P.pole(cu,cv,top-1,top+10,stone,.5);
+      P.face(Array.from({length:ROUND_SIDES},(_,i)=>[cu+Math.cos(i/ROUND_SIDES*Math.PI*2)*2.2,cv+Math.sin(i/ROUND_SIDES*Math.PI*2)*2.2,top+11]),P.col(day?'#f4d27a':'#ffe08a'),!day);
       return true;
     }
     if(model==='town-hall'){
@@ -313,6 +328,21 @@
       for(let i=0;i<3;i++){const v=d*(.63+i*.12);P.box(w*.81,v,w*.14,d*.07,8,P.col('#839d96'));P.line([[w*.83,v,8],[w*.83,v,17],[w*.92,v,17],[w*.92,v,8]],P.col('#ccd4ba'),.7);}
       const tu=w*.57,tv=d*.86;P.cylinder(tu,tv,2,0,63,P.col('#b2c7bc'));P.box(tu-2,tv-3,4,5,4,P.col('#dce4d8'),undefined,63);
       for(let i=0;i<3;i++){const a=-Math.PI/2+i*Math.PI*2/3;P.face([[tu,tv+2.2,65],[tu+Math.cos(a)*20,tv+2.2,65+Math.sin(a)*20],[tu+Math.cos(a+.14)*16,tv+2.2,65+Math.sin(a+.14)*16]],P.col('#e1e7db'));}
+    }else if(fn==='idea-mountain'){
+      // The mountain railway station: a snowy range at the back, the line out to the mountains (the train runs on it,
+      // see the landscape), the station house with its sign and bunting with one pennant per idea.
+      const rock=P.col(day?'#8f9a8a':'#56645c'),snow=P.col(day?'#f2f0e6':'#c9d2d0'),wall=P.col(day?'#e6d6b4':'#a7aa98'),roof=P.col(day?'#a4553f':'#7a4a3e'),iron=P.col('#55585a'),wood=P.col(day?'#7a5f45':'#55473a');
+      P.quad(0,0,w,d,.1,P.col(day?'#a9bf8c':'#4f6c4c'));
+      for(const [u,pw,pd,h] of [[.0,.26,.16,20],[.17,.3,.2,30],[.4,.26,.15,19],[.58,.42,.26,36]]){const cap=.36,k=(1-cap)/2;P.spire(w*u,0,w*pw,d*pd,0,h,rock);P.spire(w*(u+pw*k),d*pd*k,w*pw*cap,d*pd*cap,h*(1-cap),h*cap,snow);}
+      const rv=d*RAILWAY.line;for(let u=1;u<w;u+=3)P.box(u,rv-d*.05,1.2,d*.1,.4,wood);
+      for(const side of [-1,1])P.stick([0,rv+side*d*.03,.9],[w,rv+side*d*.03,.9],iron,.5);
+      P.box(w*.04,d*.38,w*.6,d*.1,1.6,stone);for(const u of [.08,.24,.4,.56])P.pole(w*u,d*.43,1.6,10,iron,.6);P.quad(w*.04,d*.37,w*.6,d*.12,10,roof);
+      const pennants=['#e2654f','#f2c14e','#5fb3c9','#9b7fd4','#7cc47a'],count=Math.min(Math.max(1,o.ideas||1),IDEA_FLAGS);
+      for(let i=0;i<count;i++){const u=w*(.05+.58*(i+.5)/count),z=9.6;P.face([[u-.9,d*.49,z],[u+.9,d*.49,z],[u,d*.49,z-2.2]],P.col(pennants[i%pennants.length]));}
+      const hu=w*.22,hv=d*.52,hw=w*.36,hd=d*.22,hh=14;P.box(hu,hv,hw,hd,hh,wall);P.windows(hu,hv,hw,hd,0,hh,win,6);P.gable(hu-.6,hv-.6,hw+1.2,hd+1.2,hh,8,roof,wall);
+      P.box(hu+hw*.8,hv+hd*.3,hw*.14,hd*.4,hh+10,wall);P.spire(hu+hw*.79,hv+hd*.28,hw*.16,hd*.44,hh+10,6,roof);P.frontDisc(hu+hw*.87,hh+6,1.8,P.col(day?'#f6e9c9':'#eddaa6'),!day,hv+hd*.7+.2);
+      P.box(hu+hw*.25,hv+hd,hw*.3,.6,3,P.col('#2f5d50'),undefined,hh-5);P.face([[hu+hw*.3,hv+hd+.7,hh-4.4],[hu+hw*.4,hv+hd+.7,hh-2.6],[hu+hw*.5,hv+hd+.7,hh-4.4]],snow,!day);
+      P.quad(w*.06,d*.78,w*.88,d*.2,.25,stone);for(const u of [.12,.88]){P.pole(w*u,d*.9,.3,12,iron,.6);P.box(w*u-1.2,d*.9-1.2,2.4,2.4,2,P.col(day?'#e8dcb0':'#ffe6aa'),undefined,12);}
     }else if(fn==='knowledge-library'){
       signatureBuilding(P,{model:'grand-library',seed:o.x|0},day);
     }else if(fn==='article-market'){
@@ -489,6 +519,8 @@
     riparian:30,junction:72*Math.PI/180,junctionJitter:10*Math.PI/180,meanderWaves:11,orders:[[2,4,.45,1300],[1,3,.25,520]],
     groundCell:60,mountains:46,mountainNear:500,mountainFar:2600,mountainSpread:1.05,valley:.16};
   // Fields of project reference data (LANDSCAPE.md, LS-11): size from words, a road and shelterbelts per project.
+  // The idea railway: track across the station site at RAILWAY.line of its depth, the train waiting at `platform`.
+  const RAILWAY={line:.3,platform:.12,lead:24,straight:240,smooth:5,search:40000,foot:.95,lift:2,ramp:60,gauge:5,ballast:12,sleeper:4,clear:16,pier:6,portal:[30,8,24],view:500};
   const FARM={crops:['#d8c27a','#9bbd6a','#b9cf86','#a88a62','#a7c08a','#d9d36a','#c4b07a'],side:[130,300],perWord:2.2,gap:16,road:9,beltStep:11,beltSize:[8,4],push:[0,120,260,420,620],lift:.6,linkTries:60,roadStep:8,ramp:10,bridgeCost:6,builtCost:1.5,
     layer:.35,roadLift:1,margin:5,barn:[24,16,10],
     kinds:[{base:'#d8c27a',row:'#c4a95c',spacing:6,width:2.4,tramline:'#e6d49a'},{base:'#8fb062',row:'#6f9a4e',spacing:7,width:3},
@@ -648,17 +680,17 @@
     // a bridge; then straightened by line of sight so the road runs in a few long straight pieces.
     const street=new Uint8Array(n*n);for(const r of plan.roads)along(street,r.points,r.width/2);
     const passable=k=>k>=0&&!solid[k]&&!street[k];
-    const detour=A=>{
+    const detour=(A,reached=k=>street[k],free=()=>false,guess=()=>0,budget=Infinity)=>{
       const start=cellOf(A);if(start<0)return null;const cost=new Float32Array(n*n).fill(Infinity),from=new Int32Array(n*n).fill(-1),heap=[[0,start]];cost[start]=0;let goal=-1;
       const push=(c,k)=>{heap.push([c,k]);let i=heap.length-1;while(i>0){const p=(i-1)>>1;if(heap[p][0]<=heap[i][0])break;[heap[p],heap[i]]=[heap[i],heap[p]];i=p;}};
       const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===i)break;[heap[m],heap[i]]=[heap[i],heap[m]];i=m;}}return top;};
-      while(heap.length){const [c,k]=pop();if(c>cost[k])continue;if(street[k]){goal=k;break;}const i=k%n,j=(k-i)/n;
+      while(heap.length&&budget-->0){const [priority,k]=pop(),c=cost[k];if(priority>c+guess(k)+1e-6)continue;if(reached(k)){goal=k;break;}const i=k%n,j=(k-i)/n;
         for(const [di,dj,w] of [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=n||b>=n)continue;const q=a+b*n;
-          if(solid[q])continue;const p={x:x0+(a+.5)*C,y:y0+(b+.5)*C};if(!dry(p)||onPeak(p))continue;const step=w*(wet[q]?FARM.bridgeCost:built[q]?FARM.builtCost:1);
-          if(c+step<cost[q]){cost[q]=c+step;from[q]=k;push(c+step,q);}}}
+          if(solid[q]&&!free(q))continue;const p={x:x0+(a+.5)*C,y:y0+(b+.5)*C};if(!dry(p)||onPeak(p))continue;const step=w*(wet[q]?FARM.bridgeCost:built[q]?FARM.builtCost:1);
+          if(c+step<cost[q]){cost[q]=c+step;from[q]=k;push(c+step+guess(q),q);}}}
       if(goal<0)return null;
       const cells=[];for(let k=goal;k>=0;k=from[k])cells.push({x:x0+(k%n+.5)*C,y:y0+(Math.floor(k/n)+.5)*C});
-      const sight=(a,b)=>{const l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<=l;s+=C/3){const k=cellOf({x:a.x+(b.x-a.x)*s/l,y:a.y+(b.y-a.y)*s/l});if(k<0||solid[k])return false;}return true;};
+      const sight=(a,b)=>{const l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<=l;s+=C/3){const k=cellOf({x:a.x+(b.x-a.x)*s/l,y:a.y+(b.y-a.y)*s/l});if(k<0||(solid[k]&&!free(k)))return false;}return true;};
       const path=[cells[0]];for(let i=0;i<cells.length-1;){let j=cells.length-1;while(j>i+1&&!sight(cells[i],cells[j]))j--;path.push(cells[j]);i=j;}
       return path.slice(0,-1);};
     const roadZ=Z.shore+FARM.roadLift,verge=c('#8f7a55','#4b4438'),tint=h=>day?colour(h):scale(colour(h),.42);
@@ -684,6 +716,31 @@
       P.cylinder(bw+7,bd/2,4,0,20,tint('#c9c9c0'));P.dome(bw+7,bd/2,4,20,tint('#9aa3a0'));
       stamp(farm,spot.x,spot.y,bw);
     };
+    function rounded(line){
+      // Chaikin corner cutting with fixed ends: each pass replaces a corner by two points a quarter in from it.
+      let points=line;for(let pass=0;pass<RAILWAY.smooth;pass++){const next=[points[0]];for(let i=0;i<points.length-1;i++){const a=points[i],b=points[i+1];
+        if(i>0)next.push({x:a.x*.75+b.x*.25,y:a.y*.75+b.y*.25});if(i<points.length-2)next.push({x:a.x*.25+b.x*.75,y:a.y*.25+b.y*.75});}next.push(points[points.length-1]);points=next;}
+      return points;
+    }
+    function railway(line){
+      // Ballast, sleepers and two rails at ground level, rising on ramps onto bridges over water; a portal at the end.
+      const P=painter(B,B,{W:0,D:0,at:(u,v,z)=>[u,v,z]},0,q=>q),gravel=c('#a39a88','#56544c'),wood=c('#6f5843','#463b31'),steel=c('#5d6266','#8a9296'),stone=c('#b8ae98','#6b6a5e');
+      const ground=Z.terrain+RAILWAY.lift,zAt=p=>{const k=cellOf(p);return k<0?ground:ground+(Z.bridge-ground)*(1-smooth(0,RAILWAY.ramp,riverDist[k]*C));};
+      const track=[];for(let i=1;i<line.length;i++){const a=line[i-1],b=line[i],l=Math.hypot(b.x-a.x,b.y-a.y);for(let s=0;s<l;s+=RAILWAY.sleeper){const p={x:a.x+(b.x-a.x)*s/l,y:a.y+(b.y-a.y)*s/l};track.push({...p,z:zAt(p)});}}
+      const last=line[line.length-1];track.push({...last,z:zAt(last)});
+      for(let i=1;i<track.length;i++){const a=track[i-1],b=track[i],l=Math.hypot(b.x-a.x,b.y-a.y)||1,nx=-(b.y-a.y)/l,ny=(b.x-a.x)/l,w=RAILWAY.ballast/2,g=RAILWAY.gauge/2;
+        B.quad([a.x+nx*w,a.y+ny*w,a.z],[b.x+nx*w,b.y+ny*w,b.z],[b.x-nx*w,b.y-ny*w,b.z],[a.x-nx*w,a.y-ny*w,a.z],gravel);
+        const t=w*.75;B.quad([a.x+nx*t,a.y+ny*t,a.z+.35],[a.x+nx*t+(b.x-a.x)*.3,a.y+ny*t+(b.y-a.y)*.3,a.z+.35],[a.x-nx*t+(b.x-a.x)*.3,a.y-ny*t+(b.y-a.y)*.3,a.z+.35],[a.x-nx*t,a.y-ny*t,a.z+.35],wood);
+        for(const side of [-1,1])P.stick([a.x+nx*g*side,a.y+ny*g*side,a.z+.8],[b.x+nx*g*side,b.y+ny*g*side,b.z+.8],steel,.5);
+        if(a.z>ground+2&&i%RAILWAY.pier===0)for(const side of [-1,1])P.pole(a.x+nx*w*side,a.y+ny*w*side,Z.water-1,a.z,stone,1.6);}
+      for(const p of track)stamp(farm,p.x,p.y,RAILWAY.clear);
+      const prev=track[Math.max(0,track.length-4)],l=Math.hypot(last.x-prev.x,last.y-prev.y)||1,ax={x:(last.x-prev.x)/l,y:(last.y-prev.y)/l},ay={x:-ax.y,y:ax.x},[pw,pd,ph]=RAILWAY.portal;
+      const Q=painter(B,B,{W:0,D:0,at:(u,v,z)=>[last.x+ax.x*v+ay.x*u,last.y+ax.y*v+ay.y*u,z]},ground,q=>q);
+      Q.box(-pw/2,0,pw,pd,ph,stone);Q.face([[-pw*.25,-.1,0],[pw*.25,-.1,0],[pw*.25,-.1,ph*.55],[0,-.1,ph*.75],[-pw*.25,-.1,ph*.55]],c('#1d2224','#0d1012'));
+      life.rail=track.map(p=>({x:p.x,y:p.y,z:p.z}));
+      // The view may pan out as far as the tunnel, so the whole line can be followed.
+      life.view=Math.max(life.view,Math.hypot(last.x-centre.x,last.y-centre.y)+RAILWAY.view);
+    }
     const farmRoad=route=>{
       // Gravel on a darker verge; where it meets water it rises onto a small bridge with rails.
       const P=painter(B,B,{W:0,D:0,at:(u,v,z)=>[u,v,z]},0,q=>q),rail=c('#788b80','#9ba99b'),deck=c('#b5a98c','#6d6656');
@@ -700,6 +757,24 @@
           if(wetNow!==null&&w!==wetNow){run.push(p);flush(wetNow);}if(!run.length||run[run.length-1]!==p)run.push(p);wetNow=w;}
         const end={x:b.x,y:b.y};run.push(end);flush(wetNow);}
     };
+    // Mountain railway to the Mountain of Ideas: from the station the cheapest dry path to the foot of the nearest
+    // peak, where the line enters a tunnel. Rivers are crossed on bridges; fields and forest keep off the line.
+    const station=plan.scenery.find(o=>o.kind==='service'&&o.function==='idea-mountain');
+    if(station&&peaks.length){
+      const L=localFrame(station,doorSide(station,frameOf(station))),at=u=>{const [x,y]=L.at(u,L.D*RAILWAY.line,0);return {x,y};};
+      const centreOf={x:station.rcx??station.x+station.w/2,y:station.rcy??station.y+station.d/2},own=Math.hypot(station.w,station.d)/2+C,cell=k=>({x:x0+(k%n+.5)*C,y:y0+(Math.floor(k/n)+.5)*C});
+      // The line leaves from the end of the station that faces the nearest peak and runs straight on before it turns;
+      // corners are then rounded, so the train never takes a sharp bend.
+      const mid=at(L.W/2),gap=m=>Math.hypot(m.x-mid.x,m.y-mid.y)-m.r,peak=peaks.reduce((b,m)=>gap(m)<gap(b)?m:b),axis=at(L.W),forward=(peak.x-mid.x)*(axis.x-mid.x)+(peak.y-mid.y)*(axis.y-mid.y)>=0;
+      const clear=p=>{const k=cellOf(p);return k>=0&&(!solid[k]||Math.hypot(p.x-centreOf.x,p.y-centreOf.y)<own)&&dry(p)&&!onPeak(p);};
+      const foot=k=>Math.hypot(cell(k).x-peak.x,cell(k).y-peak.y)-peak.r*RAILWAY.foot,onSite=k=>Math.hypot(cell(k).x-centreOf.x,cell(k).y-centreOf.y)<own;
+      // A* towards the foot of the peak with a search budget; the far end of the station is the fallback.
+      for(const side of [forward,!forward]){
+        const along=u=>at(side?u:L.W-u);let lead=RAILWAY.lead;for(let u=RAILWAY.lead;u<=RAILWAY.straight;u+=C/2){if(!clear(along(L.W+u)))break;lead=u;}
+        const exit=along(L.W+lead),found=detour(exit,k=>foot(k)<0,onSite,k=>Math.max(0,foot(k))/C,RAILWAY.search);
+        if(found){railway([along(L.W*RAILWAY.platform),...rounded([along(L.W),exit,...found.reverse()])]);break;}
+      }
+    }
     for(const [key,docs] of [...groups].sort((p,q)=>p[0]<q[0]?-1:1)){
       docs.sort((p,q)=>p.id<q.id?-1:1);const district=plan.districts.find(d=>d.id===docs[0].district)||plan.districts[0];
       const base=Math.atan2(district.label.y-centre.y,district.label.x-centre.x)||hash32(key)%628/100;

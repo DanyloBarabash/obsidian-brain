@@ -10,13 +10,14 @@ def parameter(value, unit, reason):
 
 
 PARAMETERS = {
+    "idea_mountain_capacity": parameter(200, "ideas/mountain", "Ideas share one mountain; a full mountain raises the next one only on supplied land"),
     "library_collection_capacity": parameter(48, "source records/library wing", "Bounded shared catalogue; new wings also require supplied parcels"),
     "library_floors": parameter(4, "storeys/library wing", "Recognisable maintained reading hall without unbounded height"),
     "precinct_capacity": parameter(3, "resident seats/place", "Small groups at themed outdoor places, without inventing inhabitants"),
     "precinct_cost": parameter(3, "model development credits/place", "Outdoor furniture and access have a finite cost"),
     "landmark_sites": parameter({"sports":[165,125],"science":[115,95],"technology":[105,85],"energy":[85,65]}, "[length, width] logical metres", "Dedicated scenario estates; sports site contains a 105 by 68 metre field plus stands and concourse"),
     "landmark_site_cost": parameter(20, "model development credits/estate", "Finite cost for dedicated land and pedestrian access"),
-    "project_landmark_sites": parameter({"swimming-pool":[44,34],"football-centre":[125,88],"velodrome":[80,50],"medical-centre":[50,40],"concert-hall":[48,36],"motion-lab":[48,34],"practice-centre":[52,38],"memory-vault":[44,32],"lab-depot":[46,32]}, "[length, width] logical metres", "Scenario project estates: pool includes a 25 metre basin and decks; motion lab a filmed 20 metre lane; practice centre a small tactical pitch; memory vault a rotunda with archive wings; lab depot a hall with an outdoor rack yard; other sites reserve distinct thematic forms"),
+    "project_landmark_sites": parameter({"idea-mountain":[64,50],"swimming-pool":[44,34],"football-centre":[125,88],"velodrome":[80,50],"medical-centre":[50,40],"concert-hall":[48,36],"motion-lab":[48,34],"practice-centre":[52,38],"memory-vault":[44,32],"lab-depot":[46,32]}, "[length, width] logical metres", "Scenario project estates: pool includes a 25 metre basin and decks; motion lab a filmed 20 metre lane; practice centre a small tactical pitch; memory vault a rotunda with archive wings; lab depot a hall with an outdoor rack yard; other sites reserve distinct thematic forms"),
     "landmark_site_margin": parameter(8, "logical metres", "Reserve approach and circulation outside each landmark envelope"),
     "annex_site": parameter([40,30], "[length, width] logical metres", "Scenario project bay built into its cluster landmark complex, unless the subject names its own site"),
     "annex_gap": parameter(4, "logical metres", "Service gap between neighbouring bays of one landmark complex"),

@@ -19,6 +19,7 @@ FACILITIES = {
     "games": ("arts-centre", "Творчий центр"),
     "health": ("medical-centre", "Медичний центр"),
     "culture": ("concert-hall", "Центр культури"),
+    "ideas": ("idea-mountain", "Гора ідей"),
 }
 
 

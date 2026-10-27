@@ -453,7 +453,7 @@ class World:
             self._street_piece(("arc", 1, t0, t1), ["plaza", (1, s)])
         self.emit("plazaFounded", reason="Civic square and town hall at the origin of the radial roads")
 
-    def _new_block(self, source, tick, connected=True):
+    def _new_block(self, source, tick, connected=True, bounded=True):
         """Choose feasible serviced boundary land, lay its streets, then parcels and courtyard."""
         district = source.get("sourceClass", source["district"])
         centre = self.state["centres"].get(district)
@@ -481,9 +481,9 @@ class World:
             score = math.hypot(x, y)*VALUES["distance_weight"]
             a, b = self.cell_ticks(*cell)
             middle = (a+b)/2
-            if wedge and wedge_offset(middle, wedge):
+            if bounded and wedge and wedge_offset(middle, wedge):
                 continue
-            if source.get("quarter") and sub_wedge and wedge_offset(middle, sub_wedge):
+            if bounded and source.get("quarter") and sub_wedge and wedge_offset(middle, sub_wedge):
                 continue
             span = 2*math.pi*math.hypot(x, y)/TICKS
             if wedge:
@@ -516,9 +516,12 @@ class World:
             band = int(gap // VALUES["landmark_growth_band"])
             candidates.append((band, score, stable_hash(f"{district}:{cell[0]}:{cell[1]}"), cell))
         if not candidates:
-            # A class enclosed by its neighbours grows on the nearest free land of its own wedge.
+            # An enclosed class first takes free land of its own wedge, then crosses its wedge boundary beside
+            # its own blocks, then any free land; boundary penalties in the score keep the nearest choice.
             if connected:
-                return self._new_block(source, tick, connected=False)
+                return self._new_block(source, tick, connected=False, bounded=bounded)
+            if bounded:
+                return self._new_block(source, tick, connected=True, bounded=False)
             raise ValueError("No connected feasible land; protected land was preserved")
         candidates.sort()
         i, s = candidates[0][3]

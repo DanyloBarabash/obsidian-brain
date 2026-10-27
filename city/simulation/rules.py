@@ -84,6 +84,7 @@ RULES = [
     (74,"Автобусів стільки, скільки потребує район",["test_simulation.SimulationTests.test_transit_runs_one_vehicle_per_forty_district_residents"]),
     (75,"Бібліотека знань на центральній площі",["test_project_districts.ProjectDistrictTests.test_knowledge_library_reads_on_the_civic_square"]),
     (76,"Затиснутий клас росте у своєму секторі",["test_project_districts.ProjectDistrictTests.test_enclosed_class_grows_on_free_land_of_its_own_sector"]),
+    (77,"Гора ідей — власний район зі спільним будинком ідей",["test_ideas.IdeaTests.test_ideas_share_the_mountain_instead_of_separate_houses"]),
 ]
 
 

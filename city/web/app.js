@@ -43,6 +43,7 @@ function renderResults(){
 function noteButton(n){const b=document.createElement('button');b.className='result';b.append(document.createTextNode(n.title));const small=document.createElement('small');small.textContent=n.derived?'Спільна служба району':n.available===false?'Джерело недоступне · адресу збережено':`${n.cityRole==='knowledge-library'?'Каталог бібліотеки':n.knowledgeScope==='library'?`${kinds[n.kind]||'Матеріал'} · ${libraryCategories[n.libraryCategory]||n.libraryCategory||'Загальне'}`:n.unit?`Квартира ${n.unit}`:n.cityRoleTitle||kinds[n.kind]||'Нотатка'} · ${n.degree} зв’язків`;b.append(small);b.onclick=()=>{focusNode(n);select(n);};return b;}
 function selectFacility(n){
   if(n.function==='knowledge-library'){openLibrary();return;}
+  if(n.function==='idea-mountain'&&typeof openIdeas==='function'){openIdeas();return;}
   if(n.function==='market'&&typeof openMarket==='function'){openMarket();return;}
   closeHistory();$('district-panel').hidden=true;++noteRequest;state.selected=n;$('inspector').hidden=false;$('apartment-panel').hidden=true;$('library-source').hidden=true;
   $('note-kind').textContent='СПІЛЬНА ІНФРАСТРУКТУРА';$('note-title').textContent=n.title;$('note-path').textContent='Служба району';
@@ -64,6 +65,7 @@ function selectFacility(n){
 async function select(n){
   if(n.derived){selectFacility(n);return;}
   if(n.cityRole==='knowledge-library'&&n.available!==false){openLibrary();return;}
+  if(n.cityRole==='idea-mountain'&&n.available!==false&&typeof openIdeas==='function'){openIdeas();return;}
   closeHistory();$('district-panel').hidden=true;
   state.selected=n;$('inspector').hidden=false;$('note-title').textContent=n.title;$('note-kind').textContent=n.cityRoleTitle||kinds[n.kind]||'Нотатка';$('note-path').textContent=n.sourcePath||n.id;
   const library=n.model==='grand-library',units=(library?state.nodes.filter(item=>item.cityRole==='library-item'):(n.members||[]).map(id=>state.byId.get(id)).filter(Boolean)).sort((a,b)=>library?a.title.localeCompare(b.title):(a.unit||0)-(b.unit||0));

@@ -222,7 +222,7 @@ class Simulation:
                 self.economy.provision(parcel["block"])
                 kind = source["kind"]
                 function = "archive" if source["archived"] else "library" if kind in ("document","class") or housing.library(source) else "workshop" if kind == "session" else "work"
-                family = {"systems-and-agents":"observatory","education-and-research":"academy","games":"studio","personal-tools":"garden","commons":"library","civic":"civic","sports":"sports","science":"academy","technology":"observatory","energy":"garden","media":"studio"}.get(source["class"],"workspace")
+                family = {"systems-and-agents":"observatory","education-and-research":"academy","games":"studio","personal-tools":"garden","commons":"library","civic":"civic","sports":"sports","science":"academy","technology":"observatory","energy":"garden","media":"studio","ideas":"garden"}.get(source["class"],"workspace")
                 models = {"observatory":["laboratory","observatory","data-tower"],"academy":["college","library-wing","laboratory"],
                           "studio":["theatre","atelier","timber-house"],"garden":["cottage","greenhouse","maker-house"],
                           "library":["archive","merchant-house","clock-house"],"civic":["registry","city-archive","planning-office"],"sports":["training-hall","sports-institute"],"workspace":["office","workshop","townhouse","terrace"]}[family]

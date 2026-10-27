@@ -164,6 +164,18 @@ will notice and remind you to run `/ingest` on it.
 
 ---
 
+### `/idea <text>`
+
+Save a passing idea before it is forgotten. It belongs to no project and lands in
+`_global/ideas/idea-<date>-<slug>.md` with `status: seed`; Brain City shows it on the
+Mountain of Ideas, where it can grow into `growing`, `project` or be `shelved`.
+
+```text
+/idea Гра про тихе місто, де будинки ростуть з думок
+```
+
+---
+
 ### `/note <text>`
 
 Save a quick note mid-session.

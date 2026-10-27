@@ -6,6 +6,8 @@ import {OrbitControls} from './vendor/OrbitControls.js';
 const ATLAS_SCALE=Math.sqrt(1.5),ATLAS_POLAR=Math.PI/3,ATLAS_AZIMUTH=Math.PI/4;
 const CAMERA_DISTANCE=20000,CAMERA_FAR=80000,MIN_ZOOM=.07*ATLAS_SCALE,MAX_ZOOM=4*ATLAS_SCALE,MIN_POLAR=.12,MAX_POLAR=1.3,ROTATE_STEP=Math.PI/4;
 const LIFE={seed:'brain-city-life',swayRound:.07,swayCone:.05,flocks:4,birds:9,flockRing:[1300,1800],boats:5,boatSpan:9000,boatOffshore:[140,520],seaGlints:260,riverGlints:.35,clouds:7,cloudRing:[1800,2600],cloudHeight:650};
+// The idea train waits at the station, runs out to the mountain tunnel, stays inside and comes back (seconds, units/s).
+const TRAIN={speed:70,wait:8,away:6,length:62};
 const CLOUD_OPACITY=.68,CLOUD_FADE=[.28,.5],CONFINE={fill:.98};
 const HAZE=[2600,6500],FLY_MS=700,AGENT_CAPACITY=64,FOCUS_ZOOM=.85,DISTRICT_ZOOM=[.12,1.6];
 // The sun casts one shadow map over the whole city: a tight box keeps the texels small; flat ground only receives shadows,
@@ -68,7 +70,16 @@ function create(api){
     const clouds=new THREE.InstancedMesh(puff,new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:CLOUD_OPACITY,depthWrite:false}),LIFE.clouds);
     const sky=Array.from({length:LIFE.clouds},()=>({a:rnd()*Math.PI*2,r:LIFE.cloudRing[0]+rnd()*LIFE.cloudRing[1],h:LIFE.cloudHeight+rnd()*160,scale:1.8+rnd()*1.6,speed:.006+rnd()*.008}));
     for(const m of [birds,boats,glints,clouds]){m.frustumCulled=false;alive.add(m);}boats.castShadow=true;
-    life={birds,flocks,boats,fleet,coast:c,shore,lane,glints,spots,clouds,sky,centre,view:data.view};updateLife(0);confine();
+    let train=null;
+    if(data.rail?.length>1){
+      // Locomotive and two carriages facing +x, nose at the origin; rides on the rail polyline from the landscape.
+      const parts=[[box(18,8,9,-9,5,0),'#2f5d50'],[box(7,5,9,-15,11.5,0),'#2f5d50'],[box(2,4,2,-3,11,0),'#333333'],[box(18.4,1.6,9.4,-9,1.8,0),'#b8483a']];
+      for(const [x,col] of [[-30,'#c9a24b'],[-51,'#3f6979']]){parts.push([box(20,8,9,x,5.4,0),col],[box(20.6,1.2,9.6,x,10,0),'#f3ecd8']);for(let i=0;i<3;i++)parts.push([box(3.4,2.6,9.2,x-6+i*6,6.4,0),'#f1d79a']);}
+      const mesh=new THREE.Mesh(merged(parts),new THREE.MeshLambertMaterial({vertexColors:true}));mesh.castShadow=true;mesh.frustumCulled=false;alive.add(mesh);
+      const rail=data.rail,run=[0];for(let k=1;k<rail.length;k++)run.push(run[k-1]+Math.hypot(rail[k].x-rail[k-1].x,rail[k].y-rail[k-1].y));
+      train={mesh,rail,run};
+    }
+    life={birds,flocks,boats,fleet,coast:c,shore,lane,glints,spots,clouds,sky,centre,view:data.view,train};updateLife(0);confine();
   }
   function updateLife(t){
     if(!life)return;const {birds,flocks,boats,fleet,coast:c,shore,lane,glints,spots,clouds,sky,centre}=life;let i=0;
@@ -86,7 +97,16 @@ function create(api){
     glints.material.opacity=state.day?.75:.35;
     sky.forEach((s,k)=>{const a=s.a+t*s.speed;position.set(centre.x+Math.cos(a)*s.r,ground+s.h,centre.y+Math.sin(a)*s.r);quaternion.identity();size.set(s.scale,s.scale*.45,s.scale);clouds.setMatrixAt(k,matrix.compose(position,quaternion,size));});
     for(const m of [birds,boats,glints,clouds])m.instanceMatrix.needsUpdate=true;
+    if(life.train)moveTrain(life.train,t);
     fadeClouds();
+  }
+  function moveTrain({mesh,rail,run},t){
+    // Out and back along the line: s is the nose position; past the end it runs on into the tunnel and is hidden.
+    const total=run.at(-1)+TRAIN.length,ride=total/TRAIN.speed,cycle=2*(TRAIN.wait+ride)+TRAIN.away,k=t%cycle;
+    const out=k<TRAIN.wait?0:k<TRAIN.wait+ride?(k-TRAIN.wait)/ride:k<TRAIN.wait+ride+TRAIN.away?1:k<TRAIN.wait*2+ride+TRAIN.away?1:Math.max(0,1-(k-TRAIN.wait*2-ride-TRAIN.away)/ride);
+    const s=TRAIN.length+out*(total-TRAIN.length),at=v=>{let j=1;while(j<run.length-1&&run[j]<v)j++;const p=rail[j-1],q=rail[j],f=(v-run[j-1])/((run[j]-run[j-1])||1);return {x:p.x+(q.x-p.x)*f,y:p.y+(q.y-p.y)*f,z:f>1?q.z:p.z+(q.z-p.z)*f};};
+    const nose=at(s),tail=at(Math.max(0,s-TRAIN.length));mesh.visible=s-TRAIN.length<run.at(-1)-2;
+    mesh.position.set(nose.x,(nose.z+tail.z)/2,nose.y);mesh.rotation.set(0,-Math.atan2(nose.y-tail.y,nose.x-tail.x),Math.atan2(nose.z-tail.z,TRAIN.length));
   }
   function fadeClouds(){
     // Clouds belong to the overview: they fade out as the camera comes closer and are gone at street level.
